@@ -1,0 +1,322 @@
+/* Mabel — engine: the finance model every page shares.
+   One state → one calc(): balance, allowance, forecast, risk and health all move together. */
+(function(){
+var M=window.M,D=M.D,E=M.E={};
+var clamp=M.clamp,fmt=M.fmt;
+function p2(n){return n<10?'0'+n:''+n}
+
+/* ---------- state ---------- */
+E.todayISO=function(){var d=new Date();return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())};
+E.newState=function(id,name,email){return {v:1,id:id,name:name,email:email,created:Date.now(),
+  settings:{budget:10000,days:30,startISO:E.todayISO(),day:1,mode:'aesthetic',theme:'light',quiet:false,chaos:true,realtime:false,avatar:'🌸',onboarded:false,finished:false,month:1},
+  tx:[],commits:[],subs:[],goals:[],incomes:[],wishlist:[],decisions:[],dayLog:[],hist:[],caps:{},aura:0,auraLog:[],badges:{},chal:{},streak:0,bestStreak:0,quietDays:0,scratch:{day:0},board:null,sim:{lastRewardDay:0,best:''},seen:{},months:[]}};
+E.migrate=function(S){var n=E.newState(S.id,S.name,S.email);Object.keys(n).forEach(function(k){if(S[k]==null)S[k]=n[k]});Object.keys(n.settings).forEach(function(k){if(S.settings[k]==null)S.settings[k]=n.settings[k]})};
+E.dateOf=function(S,day){var p=S.settings.startISO.split('-');return new Date(+p[0],+p[1]-1,+p[2]+day-1)};
+E.dateStr=function(S,day,long){return E.dateOf(S,day).toLocaleDateString('en-IN',long?{weekday:'long',day:'numeric',month:'short'}:{weekday:'short',day:'numeric',month:'short'})};
+E.isWeekend=function(S,day){var w=E.dateOf(S,day).getDay();return w===0||w===6};
+E.level=function(a){var L=D.LEVELS,i=0;for(var k=0;k<L.length;k++)if(a>=L[k][0])i=k;return {i:i,name:M.S2(L[i][1],L[i][2]),next:L[i+1]?L[i+1][0]:null,at:L[i][0]}};
+E.addAura=function(S,n,why){S.aura=Math.max(0,S.aura+n);S.auraLog.unshift({day:S.settings.day,n:n,why:why,ts:Date.now()});if(S.auraLog.length>60)S.auraLog.length=60};
+
+/* ---------- transactions ---------- */
+E.isDisc=function(t){return t.type==='out'&&(t.kind==='reg'||t.kind==='surprise')};
+E.addTx=function(S,o){
+  var t={id:M.uid(),day:o.day||S.settings.day,type:o.type||'out',amt:Math.abs(+o.amt||0),cat:o.cat||'other',note:o.note||'',pay:o.pay||'upi',kind:o.kind||'reg',ts:Date.now()};
+  ['ref','from','goal','dec','regret'].forEach(function(k){if(o[k]!=null)t[k]=o[k]});
+  S.tx.push(t);return t;
+};
+E.contribute=function(S,gid,amt,day){
+  var g=S.goals.filter(function(x){return x.id===gid})[0];if(!g||amt<=0)return null;
+  amt=Math.min(amt,Math.max(0,g.target-g.saved));if(amt<=0)return null;
+  g.saved+=amt;
+  return E.addTx(S,{type:'out',amt:amt,cat:'goal',note:g.name,kind:'goal',goal:gid,day:day});
+};
+E.postDue=function(S,day,out){
+  out=out||{events:[]};
+  S.commits.forEach(function(c){if(c.active!==false&&c.due===day&&!S.tx.some(function(t){return t.ref===c.id})){E.addTx(S,{amt:c.amt,cat:'bills',note:c.name,kind:'commit',ref:c.id,day:day,pay:'auto'});out.events.push({t:'bill',e:c.e,name:c.name,amt:c.amt})}});
+  S.subs.forEach(function(s){if(s.active!==false&&s.due===day&&!S.tx.some(function(t){return t.ref===s.id})){E.addTx(S,{amt:s.amt,cat:'subs',note:s.name,kind:'sub',ref:s.id,day:day,pay:'auto'});out.events.push({t:'sub',e:s.e,name:s.name,amt:s.amt})}});
+  S.incomes.forEach(function(i){if(!i.posted&&i.day===day){i.posted=true;E.addTx(S,{type:'in',amt:i.amt,cat:'income',note:i.name,kind:'in',day:day});out.events.push({t:'in',e:'💼',name:i.name,amt:i.amt})}});
+  return out;
+};
+
+/* ---------- the model ---------- */
+E.calc=function(S,opt){
+  opt=opt||{};
+  var st=S.settings,Dn=st.days,d=Math.min(st.day,Dn),tx=opt.tx||S.tx,subs=opt.subs||S.subs,commits=opt.commits||S.commits,goals=opt.goals||S.goals;
+  var inc=0,out=0,disc=0,commit=0,goalOut=0,today=0,surprise=0,byDay=[],cat={},contrib={},i;
+  for(i=0;i<=Dn+1;i++)byDay[i]=0;
+  tx.forEach(function(t){
+    if(t.type==='in'){if(t.kind==='goalback'){goalOut-=t.amt;contrib[t.goal]=(contrib[t.goal]||0)-t.amt}else inc+=t.amt;return}
+    if(!t.from)out+=t.amt;
+    if(t.kind==='commit'||t.kind==='sub')commit+=t.amt;
+    else if(t.kind==='goal'){goalOut+=t.amt;contrib[t.goal]=(contrib[t.goal]||0)+t.amt}
+    else{disc+=t.amt;if(byDay[t.day]!=null)byDay[t.day]+=t.amt;if(t.day===d)today+=t.amt;if(t.kind==='surprise')surprise+=t.amt}
+    cat[t.cat]=(cat[t.cat]||0)+t.amt;
+  });
+  var goalBack=0;tx.forEach(function(t){if(t.kind==='goalback')goalBack+=t.amt});
+  var realInc=inc;
+  var balance=st.budget+inc+goalBack-out;
+  // commitments still to come
+  var upcoming=0,upList=[];
+  commits.forEach(function(c){if(c.active!==false&&c.due>d&&c.due<=Dn){upcoming+=c.amt;upList.push({kind:'bill',id:c.id,name:c.name,e:c.e,amt:c.amt,due:c.due})}});
+  subs.forEach(function(s){if(s.active!==false&&s.due>d&&s.due<=Dn){upcoming+=s.amt;upList.push({kind:'sub',id:s.id,name:s.name,e:s.e,amt:s.amt,due:s.due})}});
+  upList.sort(function(a,b){return a.due-b.due});
+  var incomeAhead=0;S.incomes.forEach(function(x){if(!x.posted&&x.day>d&&x.day<=Dn)incomeAhead+=x.amt});
+  // goal pledges: what you promised to set aside this month and haven't yet
+  var pledge=0;goals.forEach(function(g){if(g.done||g.saved>=g.target)return;var left=Math.max(0,(g.plan||0)-(contrib[g.id]||0));pledge+=Math.min(left,Math.max(0,g.target-g.saved))});
+  var free=balance-upcoming-pledge,daysLeft=Dn-d+1;
+  var start=free+today,dailyRaw=start/daysLeft,dailyBudget=Math.max(0,dailyRaw),todayLeft=dailyBudget-today;
+  // pace = how fast you actually spend on wants
+  var past=[];for(i=1;i<d;i++)past.push(byDay[i]);
+  var sum=function(a){return a.reduce(function(x,y){return x+y},0)};
+  var pace;
+  if(!past.length)pace=Math.max(0,dailyBudget*0.8);
+  else{var rec=past.slice(-7),avgAll=sum(past)/past.length,avgRec=sum(rec)/rec.length;pace=0.65*avgRec+0.35*avgAll}
+  pace*=(opt.paceMul==null?1:opt.paceMul);
+  var cv=0;if(past.length>=3){var mean=sum(past)/past.length,sd=Math.sqrt(sum(past.map(function(x){return (x-mean)*(x-mean)}))/past.length);cv=mean>0?sd/mean:0}
+  var spendAhead=Math.max(0,pace-today)+pace*(daysLeft-1);
+  var projectedEnd=free+incomeAhead-spendAhead;
+  var avail=free+today+incomeAhead;
+  var runway=pace>0?Math.max(0,avail)/pace:99;
+  var brokeDay=(avail<=0)?d:(runway<daysLeft?d+Math.floor(runway):null);
+  // risk 0..100 (higher = worse)
+  var ratio=avail>0?(pace*daysLeft)/avail:9;
+  var burn=avail<=0?100:clamp((ratio-0.55)/0.65,0,1)*100;
+  var buffer=avail<=0?100:clamp(1-avail/(0.22*st.budget),0,1)*100;
+  var commitP=clamp((upcoming/Math.max(1,balance))/0.55,0,1)*100;
+  var vol=past.length>=3?clamp((cv-0.3)/1.2,0,1)*100:25;
+  var shock=clamp(surprise/(0.14*st.budget),0,1)*100;
+  var rs=Math.round(0.40*burn+0.25*buffer+0.15*commitP+0.12*vol+0.08*shock);
+  var risk={score:rs,label:E.riskLabel(rs),factors:[
+    {k:'burn',e:'🔥',n:M.S2('Spending pace','Kharcha speed'),v:Math.round(burn),w:40,d:M.S2('How fast you spend vs what is left.','Kitna jaldi udaa raha hai vs kitna bacha.')},
+    {k:'buffer',e:'🛟',n:M.S2('Safety buffer','Safety cushion'),v:Math.round(buffer),w:25,d:M.S2('How much breathing room is left after bills and goals.','Bills aur goals ke baad kitni saans bachi.')},
+    {k:'commit',e:'🔁',n:M.S2('Bills ahead','Aage ke bills'),v:Math.round(commitP),w:15,d:M.S2('Upcoming fixed costs vs the money you have.','Aane wale fixed kharche vs paisa.')},
+    {k:'vol',e:'🎢',n:M.S2('Up-and-down days','Roller-coaster din'),v:Math.round(vol),w:12,d:M.S2('How uneven your daily spending is.','Roz ka kharcha kitna uneven hai.')},
+    {k:'shock',e:'⚡',n:M.S2('Surprise load','Surprise ka bojh'),v:Math.round(shock),w:8,d:M.S2('How much unexpected spending has hit this month.','Is mahine kitna unexpected kharcha aaya.')}]};
+  // health 0..100 (higher = better)
+  var dl=S.dayLog,adh=dl.length?dl.filter(function(x){return x.under}).length/dl.length:0.7;
+  var nos=dl.filter(function(x){return x.nospend}).length;
+  var parts=[
+    {k:'disc',e:'🎯',n:M.S2('Budget discipline','Budget discipline'),max:30,v:30*adh,d:M.S2('Days closed at or under your allowance.','Kitne din allowance ke andar bandh hue.')},
+    {k:'save',e:'🐷',n:M.S2('Saving habit','Bachat ki aadat'),max:20,v:20*(0.6*Math.min(1,goalOut/(0.1*st.budget))+0.4*(projectedEnd>0?1:0)),d:M.S2('Money moved to goals, and a month that ends in the green.','Goals mein gaya paisa, aur green mein khatam hota mahina.')},
+    {k:'buf',e:'🛟',n:M.S2('Buffer at month end','Mahine ke end ka cushion'),max:15,v:15*clamp(projectedEnd/(0.1*st.budget),0,1),d:M.S2('Forecast leftover vs 10% of your budget.','Forecast bacha hua paisa vs budget ka 10%.')},
+    {k:'comm',e:'🔁',n:M.S2('Bills covered','Bills covered'),max:15,v:15*(upcoming<=0?1:clamp(balance/upcoming,0,1)),d:M.S2('Can your balance pay what is already due?','Balance se jo due hai woh chuka sakte ho?')},
+    {k:'stab',e:'🧘',n:M.S2('Steady days','Steady din'),max:10,v:10*(1-vol/100),d:M.S2('Calmer spending beats spikes.','Calm kharcha spikes se behtar.')},
+    {k:'hab',e:'🔥',n:M.S2('Habits','Aadatein'),max:10,v:10*(0.6*Math.min(S.streak,7)/7+0.4*(nos>0?1:0)),d:M.S2('Streaks and no-spend days.','Streaks aur no-spend din.')}];
+  var hs=Math.round(parts.reduce(function(a,p){return a+p.v},0));
+  var health={score:hs,label:E.healthLabel(hs),parts:parts};
+  return {d:d,D:Dn,daysLeft:daysLeft,balance:balance,inc:realInc,disc:disc,commit:commit,goalOut:goalOut,today:today,surprise:surprise,byDay:byDay,cat:cat,contrib:contrib,
+    upcoming:upcoming,upList:upList,incomeAhead:incomeAhead,pledge:pledge,free:free,avail:avail,dailyRaw:dailyRaw,dailyBudget:dailyBudget,todayLeft:todayLeft,over:today>dailyBudget+0.5,
+    pace:pace,cv:cv,spendAhead:spendAhead,projectedEnd:projectedEnd,runway:runway,brokeDay:brokeDay,risk:risk,health:health,
+    spentTotal:disc+commit};
+};
+E.riskLabel=function(s){return s<25?{t:M.S2('Chill','Chill'),e:'🌸',c:'ok'}:s<50?{t:M.S2('Watch it','Dhyan se'),e:'🙂',c:'warn'}:s<75?{t:M.S2('Spicy','Garam'),e:'😬',c:'bad'}:{t:M.S2('Cooked','Cooked'),e:'🚨',c:'bad'}};
+E.healthLabel=function(s){return s>=80?M.S2('Thriving','Mast'):s>=65?M.S2('Solid','Solid'):s>=45?M.S2('Wobbly','Thoda wobbly'):M.S2('Needs love','Dhyan de')};
+// what you can spend per day from tomorrow, treating today's remaining allowance as used
+E.nextAllow=function(c){if(c.daysLeft<=1)return Math.max(0,c.free);return Math.max(0,(c.free-Math.max(0,c.todayLeft))/(c.daysLeft-1))};
+E.catWindow=function(S,from,to){var r={},t=0;S.tx.forEach(function(x){if(E.isDisc(x)&&x.day>=from&&x.day<=to){r[x.cat]=(r[x.cat]||0)+x.amt;t+=x.amt}});r._t=t;return r};
+E.unusedSubs=function(S){var d=S.settings.day;return S.subs.filter(function(s){return s.active!==false&&!s.rev&&d-(s.used==null?0:s.used)>=14&&s.due>d})};
+
+/* ---------- decide: "Should I buy this?" ---------- */
+E.assess=function(S,price,cat,need){
+  var b=E.calc(S),tx2=S.tx.concat([{id:'sim',type:'out',amt:price,cat:cat,kind:'reg',day:b.d,note:'sim'}]),a=E.calc(S,{tx:tx2});
+  var share=price/Math.max(1,b.free),tier=b.free<=0&&price>0?3:share<0.08?0:share<0.2?1:share<0.45?2:3;
+  if(need&&tier>0)tier--;
+  var nb=E.nextAllow(b),na=E.nextAllow(a);
+  var g=S.goals.filter(function(x){return !x.done&&x.saved<x.target&&x.plan>0})[0],planTot=S.goals.reduce(function(a,x){return a+(x.done?0:x.plan||0)},0);
+  var catShare=(b.cat[cat]||0)/Math.max(1,b.disc);
+  var r={price:price,cat:cat,need:need,b:b,a:a,share:share,tier:tier,over:price>b.todayLeft,nb:nb,na:na,goal:g,planPct:planTot>0?price/planTot*100:null,shortfall:Math.max(0,Math.min(b.pledge,-a.free)),catShare:catShare,
+    riskD:a.risk.score-b.risk.score,healthD:a.health.score-b.health.score,days:a.daysLeft};
+  r.mood=['🌸','🙂','😬','🚨'][tier];
+  var L=M.mode==='chill',pc=Math.round(share*100),nx=fmt(na);
+  var v=[
+    L?'Arre chhod, it barely moves your month. Le le.':'Whatever, it barely moves your month. Go for it.',
+    L?'Theek hai, but your daily allowance drops to '+nx+'. Worth it?':'Fine, but your daily allowance drops to '+nx+'. Worth it?',
+    L?'That\'s '+pc+'% of what\'s spendable. Hafta bhar ruk ke dekh?':'That\'s '+pc+'% of what\'s spendable. Sleep on it for a week?',
+    L?'Aap thode se gawar ho kya?? That leaves '+nx+' a day for '+(a.daysLeft-1)+' days. Sleep on it.':'Chill out. That leaves '+nx+' a day for '+(a.daysLeft-1)+' days. Sleep on it.'][tier];
+  if(need&&tier<3)v=(L?'Zaroorat hai toh theek hai. ':'Needs are allowed. ')+v;
+  r.verdict=v;
+  r.notes=[];
+  if(catShare>0.3&&cat!=='food'&&D.CATS[cat])r.notes.push({e:'📊',t:M.S2(D.CATS[cat].n+' is already '+Math.round(catShare*100)+'% of your spending.',D.CATS[cat].n+' pehle hi '+Math.round(catShare*100)+'% kharche ka hai.')});
+  if(r.planPct&&r.planPct>=25)r.notes.push({e:'🎯',t:M.S2('Equal to '+Math.round(r.planPct)+'% of everything you plan to save this month.','Is mahine ki poori bachat ka '+Math.round(r.planPct)+'% ke barabar.')});
+  if(r.shortfall>0)r.notes.push({e:'🎯',t:M.S2('Your goals would lose up to '+fmt(r.shortfall)+' of this month\'s plan.','Goals ka '+fmt(r.shortfall)+' tak kat jayega.')});
+  if(a.brokeDay&&!b.brokeDay)r.notes.push({e:'⏳',t:M.S2('At your pace, money runs out around day '+a.brokeDay+'.','Isi speed pe day '+a.brokeDay+' ke aas-paas paisa khatam.')});
+  if(price>0&&b.dailyBudget>0)r.notes.push({e:'📅',t:M.S2('That is '+(price/b.dailyBudget).toFixed(1)+' days of allowance.','Matlab '+(price/b.dailyBudget).toFixed(1)+' din ka allowance.')});
+  return r;
+};
+
+/* ---------- time: closing a day ---------- */
+E.closeDay=function(S){
+  var st=S.settings,c=E.calc(S),d=st.day,out={day:d,events:[],badges:[],aura:0,under:false,spent:c.today,budget:Math.round(c.dailyBudget)};
+  var under=c.today<=c.dailyBudget+0.5,nos=c.today===0;
+  out.under=under;out.nospend=nos;
+  S.dayLog.push({day:d,spent:c.today,budget:Math.round(c.dailyBudget),under:under,nospend:nos,bal:Math.round(c.balance)});
+  if(under){S.streak++;if(S.streak>S.bestStreak)S.bestStreak=S.streak;out.aura+=15}else S.streak=0;
+  if(nos){out.aura+=10;out.badges.push('nospend')}
+  if(S.streak>=7)out.badges.push('streak7');
+  if(st.quiet){S.quietDays++;if(S.quietDays>=7)out.badges.push('quiet')}
+  S.hist.push({day:d,health:c.health.score,risk:c.risk.score,bal:Math.round(c.balance)});
+  if(out.aura)E.addAura(S,out.aura,under?'Under allowance':'');
+  if(d>=st.days){st.finished=true;out.finished=true;out.passed=c.balance>=0;return out}
+  st.day=d+1;E.postDue(S,st.day,out);
+  if(st.chaos&&Math.random()<0.28){var sh=M.pick(D.SHOCKS);out.shock={e:sh.e,t:sh.t,d:M.S2(sh.d,sh.c),amt:Math.round(sh.amt*(0.7+Math.random()*0.6)/10)*10}}
+  return out;
+};
+E.syncRealtime=function(S){
+  var st=S.settings,outs=[];if(!st.realtime||st.finished)return outs;
+  var p=st.startISO.split('-'),t0=new Date(+p[0],+p[1]-1,+p[2]).getTime(),n=new Date();n=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
+  var target=clamp(Math.round((n-t0)/864e5)+1,1,st.days+1);
+  while(st.day<target&&!st.finished){var chaos=st.chaos;st.chaos=false;outs.push(E.closeDay(S));st.chaos=chaos}
+  return outs;
+};
+E.newMonth=function(S,carry){
+  var c=E.calc(S),st=S.settings;
+  S.months.push({month:st.month,end:Math.round(c.balance),health:c.health.score,aura:S.aura,spent:Math.round(c.disc)});
+  st.budget=10000+(carry?Math.max(0,Math.round(c.balance/100)*100):0);st.month++;st.day=1;st.finished=false;st.startISO=E.todayISO();
+  S.tx=[];S.dayLog=[];S.hist=[];S.streak=0;S.wishlist=S.wishlist.filter(function(w){return w.day<0});S.incomes.forEach(function(i){i.posted=false});
+  S.goals.forEach(function(g){if(g.done)g.done=true});S.caps={};S.chal={};S.subs.forEach(function(s){s.rev=false});
+  E.postDue(S,1);
+};
+
+/* ---------- challenges ---------- */
+E.chalDef=function(id){return D.CHALS.filter(function(x){return x.id===id})[0]};
+E.startChal=function(S,id){S.chal[id]={status:'active',start:S.settings.day}};
+E.chalEval=function(S,id){
+  var def=E.chalDef(id),c=E.calc(S),st=S.settings,d=st.day,rec=S.chal[id];
+  if(id==='broke'){var fin=st.finished;return {state:fin?(c.balance>=0?'done':'failed'):'active',pct:Math.min(1,(fin?st.days:d-1)/st.days),label:M.S2('Day ','Din ')+Math.min(d,st.days)+' · '+fmt(c.balance)+M.S2(' left',' bacha'),alert:c.balance<0}}
+  if(!rec||rec.status==='idle')return {state:'idle',pct:0,label:M.S2('Not started','Shuru nahi hua')};
+  if(rec.status==='done')return {state:'done',pct:1,label:M.S2('Completed on day ','Complete: day ')+rec.doneDay};
+  if(rec.status==='failed')return {state:'failed',pct:rec.pct||0,label:rec.why||''};
+  var start=rec.start,el=Math.max(0,d-start),bad;
+  if(id==='nodeliv'){bad=S.tx.filter(function(t){return t.cat==='delivery'&&t.day>=start&&t.type==='out'})[0];if(bad)return {state:'failed',pct:el/def.days,why:M.S2('Ordered delivery on day ','Delivery mangaya day ')+bad.day};return {state:el>=def.days?'done':'active',pct:Math.min(1,el/def.days),label:el+'/'+def.days+M.S2(' days clean',' din clean')}}
+  if(id==='cash'){bad=S.tx.filter(function(t){return E.isDisc(t)&&t.day>=start&&t.pay!=='cash'})[0];if(bad)return {state:'failed',pct:el/def.days,why:M.S2('Paid by '+bad.pay.toUpperCase()+' on day '+bad.day,bad.pay.toUpperCase()+' se pay kiya day '+bad.day)};return {state:el>=def.days?'done':'active',pct:Math.min(1,el/def.days),label:el+'/'+def.days+M.S2(' cash days',' cash din')}}
+  if(id==='chai'){bad=S.tx.filter(function(t){return t.cat==='fun'&&t.type==='out'&&t.amt>150&&t.day>=start})[0];if(bad)return {state:'failed',pct:el/def.days,why:M.S2('Big outing spend on day ','Bada outing kharcha day ')+bad.day};return {state:el>=def.days?'done':'active',pct:Math.min(1,el/def.days),label:el+'/'+def.days+M.S2(' days',' din')}}
+  if(id==='purge'){var tot=S.subs.length,rv=S.subs.filter(function(s){return s.rev}).length;return {state:tot>0&&rv>=tot?'done':'active',pct:tot?rv/tot:0,label:tot?rv+'/'+tot+M.S2(' reviewed',' reviewed'):M.S2('Add your subscriptions first','Pehle subscriptions add kar')}}
+  if(id==='under7'||id==='nospendw'){var need=id==='under7'?7:2,n=0,dl=S.dayLog;for(var i=dl.length-1;i>=0;i--){if(dl[i].day>=start&&(id==='under7'?dl[i].under:dl[i].nospend))n++;else break}return {state:n>=need?'done':'active',pct:Math.min(1,n/need),label:n+'/'+need+M.S2(' in a row',' lagataar')}}
+  return {state:'active',pct:0,label:''};
+};
+// call after any change; returns challenges that just completed / failed
+E.checkChals=function(S){
+  var res={done:[],failed:[]};
+  D.CHALS.forEach(function(def){var rec=S.chal[def.id];if(!rec||rec.status!=='active'||def.id==='broke')return;var ev=E.chalEval(S,def.id);
+    if(ev.state==='done'){rec.status='done';rec.doneDay=S.settings.day;E.addAura(S,def.reward,def.name);res.done.push(def)}
+    else if(ev.state==='failed'){rec.status='failed';rec.pct=ev.pct;rec.why=ev.why;res.failed.push(def)}});
+  return res;
+};
+
+/* ---------- simulation: Monte Carlo over the rest of the month ---------- */
+E.rng=function(seed){var a=seed>>>0;return function(){a=(a+0x6D2B79F5)|0;var t=Math.imul(a^a>>>15,1|a);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/4294967296}};
+function gauss(r){var u=0;while(u===0)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())}
+E.catPace=function(S,c){
+  var res={},tot=0,d=c.d;
+  if(d>1){S.tx.forEach(function(t){if(E.isDisc(t)&&t.kind==='reg'&&t.day<d)res[t.cat]=(res[t.cat]||0)+t.amt});Object.keys(res).forEach(function(k){res[k]/=(d-1)})}
+  Object.keys(res).forEach(function(k){tot+=res[k]});
+  if(tot<=0){var sh={food:.28,delivery:.14,transport:.16,shopping:.18,fun:.12,health:.04,study:.04,other:.04};res={};Object.keys(sh).forEach(function(k){res[k]=c.pace*sh[k]});tot=c.pace}
+  var f=tot>0?c.pace/tot:1;Object.keys(res).forEach(function(k){res[k]*=f});
+  return res;
+};
+// scn: {mul:{cat:factor}, cancelSubs:bool, cancel:{id:1}, events:[{day,amt,label}], chaos:0..3}
+E.monte=function(S,scn,runs,seed){
+  scn=scn||{};runs=runs||500;
+  var c=E.calc(S),d=c.d,Dn=c.D,rng=E.rng(seed||7),cp=E.catPace(S,c),mul=scn.mul||{},chaos=scn.chaos==null?1:scn.chaos;
+  var base=0;Object.keys(cp).forEach(function(k){base+=cp[k]*(mul[k]==null?1:mul[k])});
+  var sig=clamp(c.cv*0.6,0.25,0.7),due={},incm={},ev={},i,dd;
+  S.commits.forEach(function(x){if(x.active!==false&&x.due>d&&x.due<=Dn)due[x.due]=(due[x.due]||0)+x.amt});
+  S.subs.forEach(function(x){if(x.active!==false&&!scn.cancelSubs&&!(scn.cancel&&scn.cancel[x.id])&&x.due>d&&x.due<=Dn)due[x.due]=(due[x.due]||0)+x.amt});
+  S.incomes.forEach(function(x){if(!x.posted&&x.day>d&&x.day<=Dn)incm[x.day]=(incm[x.day]||0)+x.amt});
+  (scn.events||[]).forEach(function(e){if(e.day>=d&&e.day<=Dn)ev[e.day]=(ev[e.day]||0)+e.amt});
+  var pdp=c.pledge/Math.max(1,c.daysLeft),days=[];for(dd=d;dd<=Dn;dd++)days.push(dd);
+  var paths=[],surv=0,shockP=0.04*chaos,mins=[];
+  for(var r=0;r<runs;r++){
+    var bal=c.balance,path=[],mn=Infinity;
+    for(dd=d;dd<=Dn;dd++){
+      var b0=dd===d?Math.max(0,base-c.today):base,sp=b0*Math.exp(sig*gauss(rng)-sig*sig/2);
+      if(shockP>0&&rng()<shockP)sp+=clamp(Math.exp(Math.log(650)+0.75*gauss(rng)),120,4000);
+      sp+=ev[dd]||0;
+      bal-=sp+(due[dd]||0)-(incm[dd]||0)+pdp;
+      path.push(bal);if(bal<mn)mn=bal;
+    }
+    paths.push(path);mins.push(mn);if(mn>=0)surv++;
+  }
+  var p10=[],p50=[],p90=[];
+  for(i=0;i<days.length;i++){var col=paths.map(function(p){return p[i]}).sort(function(a,b){return a-b});p10.push(col[Math.floor(runs*0.1)]);p50.push(col[Math.floor(runs*0.5)]);p90.push(col[Math.min(runs-1,Math.floor(runs*0.9))])}
+  var danger=null;for(i=0;i<days.length;i++)if(p50[i]<0){danger=days[i];break}
+  var neg25=null;for(i=0;i<days.length;i++){var cnt=0;for(var q=0;q<runs;q++)if(paths[q][i]<0)cnt++;if(cnt/runs>=0.25){neg25=days[i];break}}
+  mins.sort(function(a,b){return a-b});
+  return {days:days,p10:p10,p50:p50,p90:p90,survive:surv/runs,endMed:p50[p50.length-1],endP10:p10[p10.length-1],endP90:p90[p90.length-1],danger:danger,riskDay:neg25,minP10:mins[Math.floor(runs*0.1)],base:base,catPace:cp,start:c.balance};
+};
+E.rescue=function(S,scn){
+  scn=scn||{};
+  var odds=function(m){var s={cancelSubs:scn.cancelSubs,cancel:scn.cancel,events:scn.events,chaos:scn.chaos,mul:{}};D.DISC.forEach(function(k){s.mul[k]=m*(scn.mul&&scn.mul[k]!=null?scn.mul[k]:1)});return E.monte(S,s,300,11).survive};
+  var cur=odds(1);if(cur>=0.9)return {m:1,already:true,odds:cur};
+  if(odds(0)<0.9)return {m:0,impossible:true,odds:odds(0)};
+  var lo=0,hi=1;for(var i=0;i<12;i++){var mid=(lo+hi)/2;if(odds(mid)>=0.9)lo=mid;else hi=mid}
+  return {m:lo,odds:odds(lo),from:cur};
+};
+// simple deterministic trajectory for charts: balance (after pledges) per day with optional extra spends
+E.traj=function(S,extra){
+  var c=E.calc(S),d=c.d,Dn=c.D,bal=c.balance-c.pledge,out=[],ev={};(extra||[]).forEach(function(e){ev[e.day]=(ev[e.day]||0)+e.amt});
+  var due={},inc={};c.upList.forEach(function(u){due[u.due]=(due[u.due]||0)+u.amt});S.incomes.forEach(function(x){if(!x.posted&&x.day>d)inc[x.day]=(inc[x.day]||0)+x.amt});
+  for(var dd=d;dd<=Dn;dd++){bal-=(dd===d?Math.max(0,c.pace-c.today):c.pace)+(due[dd]||0)-(inc[dd]||0)+(ev[dd]||0);out.push({day:dd,bal:bal})}
+  return out;
+};
+// what-if levers used by Health & Plan: each returns the changed risk / health / ending balance
+E.levers=function(S){
+  var c=E.calc(S),res=[],unused=E.unusedSubs(S);
+  function add(e,t,o){var a=E.calc(S,o);res.push({e:e,t:t,riskD:a.risk.score-c.risk.score,healthD:a.health.score-c.health.score,end:a.projectedEnd,endD:a.projectedEnd-c.projectedEnd})}
+  if(unused.length){var cp=S.subs.map(function(s){return unused.indexOf(s)>-1?Object.assign({},s,{active:false}):s});add('🦥',M.S2('Cancel '+unused.length+' unused subscription'+(unused.length>1?'s':''),unused.length+' unused subscription cancel kar'),{subs:cp})}
+  var dl=(c.cat.delivery||0),pd=c.d>1?dl/(c.d-1):0;
+  if(pd>10)add('🛵',M.S2('Skip food delivery for the rest of the month','Baaki mahina delivery band'),{paceMul:Math.max(0.3,1-pd/Math.max(1,c.pace))});
+  add('✂️',M.S2('Trim wants by 15%','Wants 15% kam kar'),{paceMul:0.85});
+  add('🧘',M.S2('One no-spend day every week','Hafte mein ek no-spend day'),{paceMul:0.86});
+  return res.sort(function(a,b){return b.endD-a.endD});
+};
+
+/* ---------- insights ("the tea") ---------- */
+E.tea=function(S){
+  var c=E.calc(S),d=c.d,L=[],tot=Math.max(1,c.disc),L2=M.mode==='chill';
+  var top=Object.keys(c.cat).filter(function(k){return D.CATS[k]&&D.CATS[k].disc}).sort(function(a,b){return c.cat[b]-c.cat[a]})[0];
+  if(top&&c.disc>0){var pc=Math.round(c.cat[top]/tot*100);
+    if(top==='delivery'){var n=S.tx.filter(function(t){return t.cat==='delivery'}).length,avg=c.cat.delivery/Math.max(1,n);L.push(M.S2('Food delivery is '+pc+'% of your spending. Cooking twice a week would save about '+fmt(avg*2)+'.','Delivery tera '+pc+'% kharcha hai. Hafte mein do baar khud bana le, ~'+fmt(avg*2)+' bachenge.'))}
+    else L.push(M.S2(D.CATS[top].n+' is '+pc+'% of your spending — your biggest category.',D.CATS[top].n+' tera '+pc+'% kharcha hai — sabse bada.'))}
+  var w1=E.catWindow(S,Math.max(1,d-6),d),w0=E.catWindow(S,Math.max(1,d-13),Math.max(0,d-7));
+  if(d>=15&&w0._t>0){var ch=(w1._t-w0._t)/w0._t;if(ch<-0.05)L.push(M.S2('You are '+Math.round(-ch*100)+'% under last week. Quietly doing great.','Pichle hafte se '+Math.round(-ch*100)+'% kam. Chupke se mast kar raha hai.'));else if(ch>0.15)L.push(M.S2('Spending is up '+Math.round(ch*100)+'% on last week. Worth a look.','Pichle hafte se '+Math.round(ch*100)+'% zyada. Dekh le ek baar.'))}
+  if(d>=15&&(w0.shopping||0)>0&&(w1.shopping||0)>(w0.shopping||0)*1.2)L.push(M.S2('Your shopping is '+Math.round(((w1.shopping||0)/w0.shopping-1)*100)+'% above usual this week. Moving that buy to next week keeps you on track.','Shopping is hafte '+Math.round(((w1.shopping||0)/w0.shopping-1)*100)+'% zyada. Agle hafte pe daal de.'));
+  var big=S.tx.filter(function(t){return E.isDisc(t)&&t.amt>=700}).sort(function(a,b){return b.amt-a.amt})[0],chai=S.tx.filter(function(t){return /chai/i.test(t.note)})[0];
+  if(big&&chai)L.push(M.S2('Chai is '+fmt(chai.amt)+'. Chai is not the problem. The '+fmt(big.amt)+' '+(big.note||'order')+' is.','Chai '+fmt(chai.amt)+' ka hai. Chai problem nahi hai. '+fmt(big.amt)+' ka '+(big.note||'order')+' hai.'));
+  var soon=c.upList.filter(function(u){return u.kind==='sub'&&u.due<=d+7});
+  if(soon.length)L.push(M.S2(soon.length+' subscription'+(soon.length>1?'s':'')+' renew'+(soon.length>1?'':'s')+' this week for '+fmt(soon.reduce(function(a,b){return a+b.amt},0))+' total.',soon.length+' subscription is hafte renew hogi — total '+fmt(soon.reduce(function(a,b){return a+b.amt},0))+'.'));
+  var un=E.unusedSubs(S);if(un.length){var u0=un[0];L.push(M.S2(u0.name+' has not been opened in '+(d-(u0.used||0))+' days. '+fmt(u0.amt)+' a month for vibes.',u0.name+' '+(d-(u0.used||0))+' din se khola nahi. '+fmt(u0.amt)+' har mahine vibes ke liye.'))}
+  if(c.brokeDay)L.push(M.S2('At this pace your money runs out around day '+c.brokeDay+'. The Simulate tab has a rescue plan.','Isi speed pe day '+c.brokeDay+' tak paisa khatam. Simulate tab mein rescue plan hai.'));
+  S.goals.filter(function(g){return !g.done&&g.saved>0}).slice(0,1).forEach(function(g){L.push(M.S2(g.name+' is '+Math.round(g.saved/g.target*100)+'% there. Consistent.',g.name+' '+Math.round(g.saved/g.target*100)+'% ho gaya. Consistent.'))});
+  if(S.streak>=2)L.push(M.S2(S.streak+'-day streak under your allowance. Do not break it for a samosa.',S.streak+' din ka streak. Samose ke liye mat tod.'));
+  if(L2)L.push('Your top spend is food delivery. No sh*t, Sherlock.');
+  if(!L.length)L.push(M.S2('Log a few days and Mabel will have notes. She always has notes.','Kuch din log kar, Mabel ke paas notes aa jayenge. Hamesha hote hain.'));
+  return L;
+};
+
+/* ---------- demo account ---------- */
+E.demoState=function(){
+  var S=E.newState('demo','Purvanshi','demo@mabel.app'),st=S.settings;
+  st.onboarded=true;st.chaos=false;st.avatar='🌸';
+  var d=new Date();d.setDate(d.getDate()-11);st.startISO=d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+  S.commits=[{id:'c1',e:'📱',name:'Phone recharge',amt:299,due:8},{id:'c2',e:'🍱',name:'Tiffin / mess',amt:900,due:15},{id:'c3',e:'📶',name:'Wi-Fi share',amt:350,due:18}];
+  S.subs=[{id:'s1',e:'▶️',name:'YouTube Premium',amt:129,due:5,used:11},{id:'s2',e:'🎵',name:'Spotify',amt:119,due:14,used:11},{id:'s3',e:'📺',name:'Netflix',amt:199,due:16,used:2},{id:'s4',e:'🏋️',name:'Gym',amt:599,due:21,used:3}];
+  S.goals=[{id:'g1',e:'🛟',name:'Emergency fund',target:2000,saved:0,plan:800,emergency:1},{id:'g2',e:'✈️',name:'Jaipur trip',target:5000,saved:0,plan:1000},{id:'g3',e:'🎧',name:'Headphones',target:2500,saved:0,plan:0}];
+  S.incomes=[{id:'i1',name:'Freelance payout',amt:1200,day:22,posted:false}];
+  var plan={1:[['food','Chai',40],['transport','Metro card',60]],2:[['food','Lunch',120],['food','Chai',40]],3:[['delivery','Zomato',290],['transport','Metro',60]],4:[['food','Groceries',150],['transport','Auto',80]],5:[['food','Chai',40]],6:[],7:[['delivery','Zomato',310],['food','Chai',40]],8:[['shopping','Amazon order',799]],9:[['food','Chai',40],['transport','Metro',60]],10:[['food','Lunch',120]],11:[['food','Chai',40],['food','Samosa',30]]};
+  E.postDue(S,1);
+  for(var day=1;day<=11;day++){
+    (plan[day]||[]).forEach(function(r){E.addTx(S,{cat:r[0],note:r[1],amt:r[2],day:day,pay:r[1]==='Chai'?'cash':'upi'})});
+    if(day===6)E.contribute(S,'g1',500,6);
+    if(day===10)E.contribute(S,'g2',300,10);
+    E.closeDay(S);
+  }
+  st.chaos=true;S.aura=135;S.auraLog=[{day:10,n:30,why:'Skipped a purchase',ts:Date.now()},{day:7,n:20,why:'Waited a week',ts:Date.now()}];
+  S.badges={wait:7,skip:10,nospend:6};S.quietDays=0;
+  S.chal={nodeliv:{status:'active',start:12},purge:{status:'active',start:9}};
+  S.subs[2].rev=false;S.subs[0].rev=true;
+  S.wishlist=[{id:'w1',name:'Sony earbuds',amt:2499,cat:'shopping',day:9,ready:16}];
+  S.decisions=[{id:'d1',day:7,name:'Sneakers',amt:1299,choice:'wait',cat:'shopping'},{id:'d2',day:10,name:'Boat headphones',amt:2499,choice:'skip',cat:'shopping'}];
+  return S;
+};
+})();
