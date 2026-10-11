@@ -1,0 +1,181 @@
+/* Mabel — core: namespace, utils, storage, auth, router, app shell, modal, toast */
+(function(){
+'use strict';
+var M=window.M={pages:{},acts:{},ins:{},chs:{},subs:{},S:null,mode:'aesthetic',theme:'light',cur:null,q:{}};
+
+/* ---------- utils ---------- */
+var $=M.$=function(i){return document.getElementById(i)};
+M.qs=function(s,r){return (r||document).querySelector(s)};
+M.qsa=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+M.esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+M.fmt=function(n){n=Math.round(+n||0);return (n<0?'−':'')+'₹'+Math.abs(n).toLocaleString('en-IN')};
+M.fmtS=function(n){n=Math.round(+n||0);return (n>0?'+':n<0?'−':'')+'₹'+Math.abs(n).toLocaleString('en-IN')};
+M.uid=function(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)};
+M.clamp=function(v,a,b){return Math.max(a,Math.min(b,v))};
+M.pick=function(a){return a[Math.floor(Math.random()*a.length)]};
+M.S2=function(a,c){return M.mode==='chill'&&c!=null?c:a};   // vibe-aware copy: aesthetic vs chill
+M.num=function(v){v=parseFloat(String(v).replace(/[,₹\s]/g,''));return isFinite(v)?v:0};
+
+/* ---------- storage (localStorage with in-memory fallback) ---------- */
+var mem={},K={users:'mabel:users',sess:'mabel:session',data:function(id){return 'mabel:data:'+id}};
+M.ls={get:function(k){try{return localStorage.getItem(k)}catch(e){return mem[k]||null}},set:function(k,v){try{localStorage.setItem(k,v)}catch(e){mem[k]=v}},del:function(k){try{localStorage.removeItem(k)}catch(e){delete mem[k]}}};
+function jget(k,d){try{var v=M.ls.get(k);return v?JSON.parse(v):d}catch(e){return d}}
+function jset(k,v){try{M.ls.set(k,JSON.stringify(v));return true}catch(e){return false}}
+M.users=function(){return jget(K.users,[])};
+var st;
+M.save=function(){clearTimeout(st);st=setTimeout(M.flush,150)};
+M.flush=function(){clearTimeout(st);if(M.S)jset(K.data(M.S.id),M.S)};
+addEventListener('pagehide',M.flush);addEventListener('beforeunload',M.flush);
+
+/* ---------- auth (client-side: salted SHA-256, data kept on this device) ---------- */
+function fnv(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16)}
+function sha(s){
+  try{if(window.crypto&&crypto.subtle&&window.TextEncoder){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)).then(function(b){return Array.prototype.map.call(new Uint8Array(b),function(x){return ('0'+x.toString(16)).slice(-2)}).join('')})}}catch(e){}
+  return Promise.resolve('f'+fnv(s)+fnv(s.split('').reverse().join('')));
+}
+function begin(id,S){M.S=S;M.ls.set(K.sess,id);M.E.migrate(S);M.mode=S.settings.mode||M.mode;M.theme=S.settings.theme||M.theme;M.ls.set('mabel-mode',M.mode);M.ls.set('mabel-theme',M.theme);M.applyLook()}
+M.signup=function(name,email,pw){
+  email=(email||'').trim().toLowerCase();name=(name||'').trim();
+  if(name.length<2)return Promise.resolve({err:'Tell us your name (2+ letters).'});
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return Promise.resolve({err:'That email looks off. Try name@email.com.'});
+  if((pw||'').length<6)return Promise.resolve({err:'Password needs at least 6 characters.'});
+  var us=M.users();if(us.some(function(u){return u.email===email}))return Promise.resolve({err:'That email already has an account. Log in instead.'});
+  var salt=M.uid();
+  return sha(salt+pw).then(function(h){var id='u'+M.uid();us.push({id:id,email:email,name:name,salt:salt,hash:h});jset(K.users,us);var S=M.E.newState(id,name,email);S.settings.mode=M.mode;S.settings.theme=M.theme;jset(K.data(id),S);begin(id,S);return {ok:1}});
+};
+M.login=function(email,pw){
+  email=(email||'').trim().toLowerCase();
+  var u=M.users().filter(function(x){return x.email===email})[0];
+  if(!u)return Promise.resolve({err:'No account with that email. Sign up first?'});
+  return sha(u.salt+pw).then(function(h){
+    if(h!==u.hash)return {err:'Wrong password. Try again.'};
+    var S=jget(K.data(u.id),null);if(!S)S=M.E.newState(u.id,u.name,u.email);
+    begin(u.id,S);return {ok:1};
+  });
+};
+M.demo=function(fresh){
+  var us=M.users(),u=us.filter(function(x){return x.id==='demo'})[0];
+  var go=function(){var S=jget(K.data('demo'),null);if(!S||fresh){S=M.E.demoState();jset(K.data('demo'),S)}begin('demo',S);return {ok:1}};
+  if(u)return Promise.resolve(go());
+  return sha('demo'+'mabel123').then(function(h){us.push({id:'demo',email:'demo@mabel.app',name:'Purvanshi',salt:'demo',hash:h});jset(K.users,us);return go()});
+};
+M.logout=function(){M.flush();M.ls.del(K.sess);M.S=null;M.go('/login')};
+M.loadSession=function(){
+  var id=M.ls.get(K.sess);if(!id)return false;var S=jget(K.data(id),null);if(!S)return false;
+  M.S=S;M.E.migrate(S);M.mode=S.settings.mode||M.mode;M.theme=S.settings.theme||M.theme;return true;
+};
+M.deleteAccount=function(){var id=M.S.id;M.ls.del(K.data(id));jset(K.users,M.users().filter(function(u){return u.id!==id}));M.ls.del(K.sess);M.S=null;M.go('/signup')};
+
+/* ---------- look: theme + vibe ---------- */
+M.applyLook=function(){
+  var r=document.documentElement;r.setAttribute('data-theme',M.theme);r.setAttribute('data-mode',M.mode);r.lang=M.mode==='chill'?'hi-Latn':'en';
+  var tc=document.querySelector('meta[name=theme-color]');if(tc)tc.setAttribute('content',getComputedStyle(r).getPropertyValue('--cream').trim()||'#FFF7F2');
+};
+M.setMode=function(m){M.mode=m;M.ls.set('mabel-mode',m);if(M.S){M.S.settings.mode=m;M.save()}M.applyLook();M.fx&&M.fx.flip();M.rerender(true);M.rebuildShell()};
+M.setTheme=function(t){M.theme=t;M.ls.set('mabel-theme',t);if(M.S){M.S.settings.theme=t;M.save()}M.applyLook();M.rerender(true)};
+
+/* ---------- router ---------- */
+M.go=function(p){if(location.hash==='#'+p)M.route();else location.hash='#'+p};
+function parseHash(){
+  var h=location.hash.replace(/^#/,''),q={},i=h.indexOf('?');
+  if(i>-1){h.slice(i+1).split('&').forEach(function(kv){var a=kv.split('=');if(a[0])q[decodeURIComponent(a[0])]=decodeURIComponent((a[1]||'').replace(/\+/g,' '))});h=h.slice(0,i)}
+  return {path:h.replace(/^\/+/,'').split('/')[0],q:q,rest:h.replace(/^\/+/,'').split('/').slice(1)};
+}
+M.NAV=[
+  ['Main',[['home','🏠','Home','Home'],['track','🧾','Track','Kharcha'],['decide','🤔','Should I buy this?','Lena hai kya?'],['sim','🔮','Simulate','Simulate']]],
+  ['Plan',[['plan','🗓️','Plan my month','Mahine ka plan'],['goals','🎯','Goals','Goals'],['commit','🔁','Subscriptions & bills','Fixed kharche']]],
+  ['Grow',[['health','💗','Health & risk','Health & risk'],['challenges','⚔️','Challenges','Challenges'],['rewards','🏅','Badges & aura','Badges & aura'],['tea','🍵','Tea & Mabel','Chai pe charcha'],['board','🎨','Vision board','Vision board']]]
+];
+M.route=function(){
+  var r=parseHash(),p=r.path;M.q=r.q;M.rest=r.rest;M.closeModal();
+  var root=$('root');
+  if(!M.S){
+    if(p!=='signup'&&p!=='login')return M.go('/login');
+    root.dataset.shell='';root.innerHTML=M.pages.auth.render(p,M.q);M.pages.auth.bind(root,p);window.scrollTo(0,0);document.title='Mabel — '+(p==='signup'?'Create account':'Log in');return;
+  }
+  if(!M.S.settings.onboarded){
+    if(p!=='onboarding')return M.go('/onboarding');
+    root.dataset.shell='';root.innerHTML=M.pages.onboarding.render();M.pages.onboarding.bind(root);window.scrollTo(0,0);document.title='Mabel — Set up your month';return;
+  }
+  if(!p||p==='login'||p==='signup'||p==='onboarding'||!M.pages[p])return M.go('/home');
+  buildShell();M.cur=p;
+  var nv=M.NAV.reduce(function(a,g){return a.concat(g[1])},[]).filter(function(n){return n[0]===p})[0];
+  document.title='Mabel — '+(nv?nv[2]:M.pages[p].title||'');
+  renderPage(p,false);window.scrollTo(0,0);M.updateShell();highlight();
+};
+function renderPage(name,soft){
+  var pg=M.pages[name],v=$('view');if(!v)return;
+  if(M.leave){try{M.leave()}catch(e){}M.leave=null}
+  v.innerHTML='<div class="page"'+(soft?' style="animation:none"':'')+'>'+pg.render(M.q,M.rest)+'</div>';
+  if(pg.bind){try{M.leave=pg.bind(v)||null}catch(e){console.error(e)}}
+}
+M.rerender=function(soft){
+  if(!M.S||!$('view')||!M.cur){return}
+  var y=window.scrollY;renderPage(M.cur,true);window.scrollTo(0,y);M.updateShell();
+};
+function highlight(){M.qsa('[data-nav]').forEach(function(a){a.classList.toggle('on',a.dataset.nav===M.cur||(a.dataset.nav==='more'&&['more','settings'].indexOf(M.cur)>-1))})}
+function navLabel(n){return M.S2(n[2],n[3])}
+function buildShell(){
+  var root=$('root');if(root.dataset.shell==='1'&&$('view'))return;
+  root.dataset.shell='1';
+  var side='<a class="logo" href="#/home">Mabel <span style="color:var(--rose)">♡</span></a><div id="sidenav"></div><div class="sidefoot" id="sidefoot"></div>';
+  root.innerHTML='<div class="app"><aside class="side" aria-label="Main navigation">'+side+'</aside><div class="main"><header class="top" id="top"></header><main id="view" tabindex="-1"></main></div></div><nav class="bnav" id="bnav" aria-label="Quick navigation"></nav>';
+  M.rebuildShell();
+}
+M.rebuildShell=function(){
+  if(!$('sidenav'))return;
+  $('sidenav').innerHTML=M.NAV.map(function(g){return '<div class="ngrp">'+M.S2(g[0],{Main:'Main',Plan:'Plan',Grow:'Grow'}[g[0]])+'</div>'+g[1].map(function(n){return '<a class="nv" data-nav="'+n[0]+'" href="#/'+n[0]+'"><span class="i">'+n[1]+'</span>'+navLabel(n)+'</a>'}).join('')}).join('');
+  $('bnav').innerHTML='<a data-nav="home" href="#/home"><span class="i">🏠</span>'+M.S2('Home','Ghar')+'</a><a data-nav="track" href="#/track"><span class="i">🧾</span>'+M.S2('Track','Kharcha')+'</a><a class="mid" data-nav="decide" href="#/decide" aria-label="Should I buy this?"><span class="i">🤔</span>'+M.S2('Decide','Lena?')+'</a><a data-nav="sim" href="#/sim"><span class="i">🔮</span>Sim</a><a data-nav="more" href="#/more"><span class="i">✨</span>'+M.S2('More','Aur')+'</a>';
+  M.updateShell();highlight();
+};
+M.updateShell=function(){
+  var S=M.S;if(!S||!$('top'))return;
+  var c=M.E.calc(S),D=S.settings.days,day=Math.min(S.settings.day,D),fin=S.settings.finished;
+  $('top').innerHTML='<a class="logo" href="#/home">Mabel <span style="color:var(--rose)">♡</span></a>'+
+    '<div class="dpill" title="Challenge progress">'+(fin?'Done ✓':M.S2('Day','Din')+' <b>'+day+'</b>/'+D)+'<i><b style="width:'+Math.round((fin?D:day-1)/D*100)+'%"></b></i></div>'+
+    '<div class="dpill hide-s" title="Balance left of your budget">'+M.fmt(c.balance)+' '+M.S2('left','bacha')+'</div><div class="sp"></div>'+
+    (fin?'<button class="btn sm rose" data-act="newmonth">'+M.S2('Start next month','Agla mahina')+'</button>':'<button class="btn sm ghost" data-act="closeday" title="End today and move to the next day"><span class="hide-s">'+M.S2('Close day','Din khatam')+' ✓</span><span class="show-s">✓</span></button>')+
+    '<button class="ib" data-act="theme" aria-label="Switch light or dark mode">'+(M.theme==='dark'?'☾':'☀')+'</button>'+
+    '<button class="btn sm rose" data-act="quickadd">+ <span class="hide-s">'+M.S2('Add expense','Kharcha daal')+'</span><span class="show-s">'+M.S2('Add','Add')+'</span></button>';
+  var f=$('sidefoot');if(f)f.innerHTML='<a class="me" href="#/settings" data-nav="settings"><span class="av">'+M.esc(S.settings.avatar||'🌸')+'</span><span style="min-width:0"><b style="display:block;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+M.esc(S.name)+'</b><small class="mut">'+(S.streak?'🔥 '+S.streak+'-day streak · ':'')+S.aura+' aura</small></span></a>';
+};
+
+/* ---------- modal ---------- */
+M.modal=function(html,o){
+  o=o||{};M.closeModal();
+  var m=document.createElement('div');m.className='mdl';m.id='mdl';
+  m.innerHTML='<div class="sheet'+(o.wide?' wide':'')+'" role="dialog" aria-modal="true"><button class="ib x" data-act="mclose" aria-label="Close">✕</button>'+html+'</div>';
+  document.body.appendChild(m);M.modalOnClose=o.onClose||null;
+  m.addEventListener('mousedown',function(e){if(e.target===m&&!o.sticky)M.closeModal()});
+  var s=m.firstChild;if(o.bind)o.bind(s);
+  if(innerWidth>900){var f=s.querySelector('[autofocus]');if(f)f.focus()}
+  return s;
+};
+M.closeModal=function(){var m=$('mdl');if(m){m.remove();var f=M.modalOnClose;M.modalOnClose=null;if(f)f()}};
+addEventListener('keydown',function(e){if(e.key==='Escape')M.closeModal()});
+
+/* ---------- toast (Mabel nudge) ---------- */
+var tt;
+M.toast=function(msg,o){
+  o=o||{};var old=document.querySelector('.nudge');if(old)old.remove();clearTimeout(tt);
+  var n=document.createElement('div');n.className='nudge';n.setAttribute('role','status');
+  n.innerHTML='<div class="ni">'+(o.icon||'M')+'</div><div style="flex:1;min-width:0"><b>'+M.esc(o.title||'Mabel')+'</b><br>'+M.esc(msg)+'</div>'+(o.undo?'<button class="un" type="button">Undo</button>':'');
+  document.body.appendChild(n);
+  if(o.undo)n.querySelector('.un').onclick=function(){o.undo();n.remove()};
+  tt=setTimeout(function(){n.classList.add('out');setTimeout(function(){n.remove()},350)},o.ms||(o.undo?6000:3800));
+};
+// Mabel speaks. Quiet mode lets only important things through.
+M.say=function(msg,o){o=o||{};if(M.S&&M.S.settings.quiet&&!o.important)return;M.toast(msg,o)};
+
+/* ---------- delegated events ---------- */
+document.addEventListener('click',function(e){
+  var el=e.target.closest('[data-act]');if(!el)return;
+  var f=M.acts[el.dataset.act];if(f){if(el.tagName==='A'&&el.getAttribute('href')==='#')e.preventDefault();f(el,e)}
+});
+document.addEventListener('input',function(e){var el=e.target.closest('[data-in]');if(el&&M.ins[el.dataset.in])M.ins[el.dataset.in](el,e)});
+document.addEventListener('change',function(e){var el=e.target.closest('[data-ch]');if(el&&M.chs[el.dataset.ch])M.chs[el.dataset.ch](el,e)});
+document.addEventListener('submit',function(e){var f=e.target.closest('form[data-sub]');if(f){e.preventDefault();var h=M.subs[f.dataset.sub];if(h)h(f,e)}});
+M.acts.mclose=function(){M.closeModal()};
+M.acts.theme=function(el,e){M.setTheme(M.theme==='dark'?'light':'dark');if(M.fx&&e)for(var i=0;i<6;i++)M.fx.spark(e.clientX+Math.random()*50-25,e.clientY+Math.random()*30)};
+addEventListener('hashchange',function(){M.route()});
+})();

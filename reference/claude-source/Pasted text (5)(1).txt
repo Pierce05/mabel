@@ -1,0 +1,161 @@
+/* Mabel — flow: the actions every page uses. Anything that changes money goes through here,
+   so balance, allowance, goals, risk and health stay connected everywhere. */
+(function(){
+var M=window.M,D=M.D,E=M.E,fx=M.fx,esc=M.esc,fmt=M.fmt,S2=M.S2;
+
+M.refresh=function(){M.save();M.rerender();M.updateShell()};
+M.addAura=function(n,why,quiet){E.addAura(M.S,n,why);if(!quiet)fx.gain((n>0?'+':'−')+Math.abs(n)+' aura',n>0)};
+M.giveBadge=function(id,aura){
+  var S=M.S;if(S.badges[id])return false;S.badges[id]=S.settings.day;
+  if(aura!==0)E.addAura(S,aura==null?25:aura,'Badge: '+D.badge(id).d);
+  setTimeout(function(){fx.award(id)},350);M.save();return true;
+};
+M.checkChals=function(){
+  var r=E.checkChals(M.S);
+  r.done.forEach(function(d){fx.confetti(30);M.say(S2('Challenge complete: '+d.name+'. +'+d.reward+' aura.','Challenge done: '+d.name+'. +'+d.reward+' aura!'),{important:1,icon:'🏆'})});
+  r.failed.forEach(function(d){M.say(S2(d.name+' reset. Start it again whenever you are ready.',d.name+' reset ho gaya. Dobara try kar.'),{important:1,icon:'↺'})});
+  return r;
+};
+M.contribute=function(gid,amt){
+  var S=M.S,g=S.goals.filter(function(x){return x.id===gid})[0];if(!g)return;
+  var t=E.contribute(S,gid,amt);if(!t){M.toast(S2('That goal is already full.','Yeh goal already full hai.'));return}
+  fx.gain('+'+fmt(t.amt)+' saved',true);
+  if(g.saved>=g.target&&!g.done){g.done=true;fx.confetti(40);M.giveBadge('goal');M.say(S2(g.name+' is fully funded!',g.name+' poora fund ho gaya!'),{important:1,icon:g.e})}
+  M.checkChals();M.refresh();
+};
+
+/* ---------- logging money ---------- */
+M.logTx=function(o){
+  var S=M.S,pre=E.calc(S),t=E.addTx(S,o),c=E.calc(S);
+  if(t.type==='out'&&E.isDisc(t)){
+    if(c.today>c.dailyBudget+0.5&&pre.today<=pre.dailyBudget+0.5){
+      fx.meme('warn',S2('LAST WARNING','LAST WARNING'),'OK?',S2('You are over today\'s allowance by '+fmt(c.today-c.dailyBudget)+'.','Aaj ke allowance se '+fmt(c.today-c.dailyBudget)+' upar. Last warning, ok.'));
+      if(M.mode!=='chill')M.say(S2('You are over today\'s allowance by '+fmt(c.today-c.dailyBudget)+'. Tomorrow\'s allowance absorbs it.',''),{important:1});
+    }else if(c.todayLeft>0&&c.todayLeft<c.dailyBudget*0.25)M.say(S2('Only '+fmt(c.todayLeft)+' left for today.','Aaj sirf '+fmt(c.todayLeft)+' bacha hai.'));
+    else if(Math.random()<0.3)M.say(M.pick(M.mode==='chill'?D.TIPSC.concat(D.TIPS):D.TIPS));
+  }
+  if(c.balance<0&&pre.balance>=0)M.say(S2('Your balance just went below ₹0. Open Simulate for a rescue plan.','Balance ₹0 se neeche. Simulate mein rescue plan dekh.'),{important:1,icon:'🚨'});
+  M.checkChals();M.save();M.rerender();M.updateShell();
+  return t;
+};
+M.deleteTx=function(id){
+  var S=M.S,i=S.tx.findIndex(function(t){return t.id===id});if(i<0)return;var t=S.tx[i];
+  S.tx.splice(i,1);
+  if(t.kind==='goal'){var g=S.goals.filter(function(x){return x.id===t.goal})[0];if(g){g.saved=Math.max(0,g.saved-t.amt);g.done=g.saved>=g.target}}
+  if(t.from){var g2=S.goals.filter(function(x){return x.id===t.from})[0];if(g2)g2.saved+=t.amt}
+  M.save();M.rerender();M.updateShell();
+  M.toast(S2('Deleted '+(t.note||'transaction')+'.',(t.note||'Entry')+' hata diya.'),{icon:'🗑',undo:function(){S.tx.splice(i,0,t);if(t.kind==='goal'){var g=S.goals.filter(function(x){return x.id===t.goal})[0];if(g)g.saved+=t.amt}if(t.from){var g3=S.goals.filter(function(x){return x.id===t.from})[0];if(g3)g3.saved-=t.amt}M.refresh()}});
+};
+
+/* ---------- add-transaction sheet ---------- */
+M.acts.chip=function(el){
+  var inp=M.$(el.dataset.t);if(!inp)return;inp.value=el.dataset.v;
+  M.qsa('[data-t="'+el.dataset.t+'"]',el.parentNode).forEach(function(b){b.classList.toggle('on',b===el)});
+  inp.dispatchEvent(new Event('input',{bubbles:true}));
+};
+M.openAdd=function(pre){
+  pre=pre||{};var S=M.S,c=E.calc(S),emg=S.goals.filter(function(g){return g.emergency&&g.saved>0&&!g.done})[0];
+  var cats=D.SPEND_CATS.concat(['surprise']),cat=pre.cat||'food';
+  var days='';for(var i=c.d;i>=Math.max(1,c.d-6);i--)days+='<option value="'+i+'"'+(i===c.d?' selected':'')+'>'+(i===c.d?S2('Today','Aaj')+' · ':'')+E.dateStr(S,i)+'</option>';
+  var html='<h2>'+S2('Log money','Hisaab likh')+'</h2><p class="mut sm" style="margin-bottom:14px">'+S2('Two taps for the quick ones. Everything updates instantly.','Do tap mein ho jaata hai. Sab kuch turant update.')+'</p>'+
+  '<div class="chips" style="margin-top:0">'+D.QUICK.map(function(q,i){return '<button type="button" class="chip" data-act="quickpick" data-i="'+i+'">'+q[0]+' '+q[1]+' '+fmt(q[3])+'</button>'}).join('')+'</div>'+
+  '<form data-sub="addtx" id="addf"><input type="hidden" id="addType" value="'+(pre.type||'out')+'"><input type="hidden" id="addCat" value="'+cat+'">'+
+  '<div class="fg"><div class="seg" role="radiogroup" aria-label="Type"><button type="button" data-act="addtype" data-v="out" class="'+((pre.type||'out')==='out'?'on':'')+'">'+S2('Spent','Kharcha')+'</button><button type="button" data-act="addtype" data-v="in" class="'+(pre.type==='in'?'on':'')+'">'+S2('Money in','Paisa aaya')+'</button></div></div>'+
+  '<div class="fg"><label class="f" for="addAmt">'+S2('Amount','Kitna')+'</label><div class="amtbox"><input id="addAmt" type="number" inputmode="decimal" min="1" step="1" placeholder="0" value="'+(pre.amt||'')+'" autofocus required></div></div>'+
+  '<div class="fg" id="addCatWrap"><label class="f">'+S2('Category','Category')+'</label><div class="chips" style="margin:0">'+cats.map(function(k){return '<button type="button" class="chip'+(k===cat?' on':'')+'" data-act="chip" data-t="addCat" data-v="'+k+'">'+D.CATS[k].e+' '+D.CATS[k].n+'</button>'}).join('')+'</div></div>'+
+  '<div class="fr"><div class="fg"><label class="f" for="addNote">'+S2('What was it?','Kya tha?')+'</label><input id="addNote" type="text" maxlength="60" placeholder="'+S2('Chai, auto, lunch…','Chai, auto, lunch…')+'" value="'+esc(pre.note||'')+'"></div><div class="fg"><label class="f" for="addDay">'+S2('When','Kab')+'</label><select id="addDay">'+days+'</select></div></div>'+
+  '<div class="fg" id="addPayWrap"><label class="f">'+S2('Paid with','Kaise diya')+'</label><input type="hidden" id="addPay" value="'+(pre.pay||'upi')+'"><div class="seg"><button type="button" data-act="chip" data-t="addPay" data-v="upi" class="chip on">UPI</button><button type="button" data-act="chip" data-t="addPay" data-v="cash" class="chip">Cash</button><button type="button" data-act="chip" data-t="addPay" data-v="card" class="chip">Card</button></div></div>'+
+  (emg?'<label class="setrow" id="addEmg" hidden style="padding:8px 0"><span><b>'+S2('Pay from '+emg.name,emg.name+' se pay kar')+'</b><small class="mut">'+fmt(emg.saved)+S2(' saved. That is what it is for.',' jama hai. Isi ke liye hai.')+'</small></span><span class="sw"><input type="checkbox" id="addFrom" value="'+emg.id+'"><span></span></span></label>':'')+
+  '<div class="err" id="addErr" aria-live="polite"></div><button class="btn rose block xl" type="submit">'+S2('Log it','Likh de')+'</button></form>';
+  M.modal(html);
+  if(pre.type==='in'){M.$('addCatWrap').hidden=true;M.$('addPayWrap').hidden=true}
+  M.ins.addcat=function(){var emgEl=M.$('addEmg');if(emgEl)emgEl.hidden=M.$('addCat').value!=='surprise'};
+  M.$('addCat').dataset.in='addcat';
+};
+M.acts.quickadd=function(){M.openAdd()};
+M.acts.quickpick=function(el){
+  var q=D.QUICK[+el.dataset.i];
+  M.logTx({cat:q[2],note:q[1],amt:q[3],pay:'upi'});M.closeModal();
+  fx.gain('−'+fmt(q[3]),false);
+};
+M.acts.addtype=function(el){
+  var t=el.dataset.v;M.$('addType').value=t;M.qsa('[data-act=addtype]').forEach(function(b){b.classList.toggle('on',b===el)});
+  M.$('addCatWrap').hidden=t==='in';M.$('addPayWrap').hidden=t==='in';
+};
+M.subs.addtx=function(){
+  var S=M.S,amt=M.num(M.$('addAmt').value);if(!(amt>0)){M.$('addErr').textContent=S2('Enter an amount above ₹0.','₹0 se zyada daal.');return}
+  var type=M.$('addType').value,note=M.$('addNote').value.trim(),day=+M.$('addDay').value;
+  if(type==='in'){M.logTx({type:'in',amt:amt,cat:'income',note:note||S2('Money in','Paisa aaya'),kind:'in',day:day});fx.gain('+'+fmt(amt),true);M.closeModal();return}
+  var cat=M.$('addCat').value,from=null,f=M.$('addFrom');
+  if(cat==='surprise'&&f&&f.checked){var g=S.goals.filter(function(x){return x.id===f.value})[0];if(g&&g.saved>=amt){g.saved-=amt;g.done=false;from=g.id}else if(g){M.$('addErr').textContent=S2('The emergency fund only has '+fmt(g.saved)+'.','Emergency fund mein sirf '+fmt(g.saved)+' hai.');return}}
+  M.logTx({cat:cat,note:note||D.CATS[cat].n,amt:amt,pay:M.$('addPay').value,day:day,kind:cat==='surprise'?'surprise':'reg',from:from});
+  M.closeModal();fx.gain('−'+fmt(amt),false);
+  if(from)M.addAura(10,'Used the emergency fund');
+};
+M.acts.regret=function(el){
+  var S=M.S,t=S.tx.filter(function(x){return x.id===el.dataset.id})[0];if(!t||t.regret)return;
+  t.regret=1;M.addAura(-10,'Regretted a purchase');M.giveBadge('regret',0);fx.meme('relax','FAHHH','',S2('Noted. It happens. Sleep on the next one.','FAHHH. Agli baar ruk ke dekh.'));M.refresh();
+};
+M.acts.deltx=function(el){M.deleteTx(el.dataset.id)};
+
+/* ---------- closing a day ---------- */
+M.acts.closeday=function(){
+  var S=M.S,c=E.calc(S),st=S.settings,nxt=st.day+1,under=c.today<=c.dailyBudget+0.5,due=[];
+  S.commits.concat(S.subs).forEach(function(x){if(x.active!==false&&x.due===nxt)due.push(x.e+' '+esc(x.name)+' '+fmt(x.amt))});
+  S.incomes.forEach(function(x){if(!x.posted&&x.day===nxt)due.push('💼 '+esc(x.name)+' +'+fmt(x.amt))});
+  var last=st.day>=st.days;
+  var html='<h2>'+(last?S2('Close the final day?','Aakhri din band kare?'):S2('Close day '+st.day+'?','Din '+st.day+' band kare?'))+'</h2>'+
+   '<div class="cd blush" style="margin:14px 0;box-shadow:none"><div class="row"><span>'+S2('Spent on wants today','Aaj wants pe kharcha')+'</span><b>'+fmt(c.today)+'</b></div><div class="row"><span>'+S2('Today\'s allowance','Aaj ka allowance')+'</span><b>'+fmt(c.dailyBudget)+'</b></div><div class="row"><span>'+S2('Result','Result')+'</span><b class="'+(under?'ok':'neg')+'">'+(c.today===0?S2('No-spend day 🦆','Zero kharcha 🦆'):under?S2('Under allowance ✓','Allowance ke andar ✓'):S2('Over by ','Upar: ')+fmt(c.today-c.dailyBudget))+'</b></div>'+
+   '<div class="row"><span>'+S2('Streak','Streak')+'</span><b>🔥 '+S.streak+(under?' → '+(S.streak+1):' → 0')+'</b></div></div>'+
+   (due.length&&!last?'<p class="sm mut" style="margin-bottom:6px">'+S2('Posting tomorrow:','Kal post hoga:')+'</p><div class="chips" style="margin-top:0">'+due.map(function(x){return '<span class="pill">'+x+'</span>'}).join('')+'</div>':'')+
+   '<p class="sm mut" style="margin:10px 0 18px">'+S2('Anything you forgot to log? Add it first — closing locks in today\'s result.','Kuch log karna reh gaya? Pehle daal le — close karne pe aaj ka result fix ho jaata hai.')+'</p>'+
+   '<div class="flex"><button class="btn ghost" data-act="mclose">'+S2('Not yet','Abhi nahi')+'</button><button class="btn rose" data-act="doclose">'+(last?S2('Close & see my month','Close karke result dekh'):S2('Close day ✓','Din khatam ✓'))+'</button></div>';
+  M.modal(html);
+};
+M.acts.doclose=function(){
+  var S=M.S,out=E.closeDay(S);M.closeModal();
+  if(out.under)fx.burst(8);
+  out.badges.forEach(function(b,i){setTimeout(function(){M.giveBadge(b)},600+i*3200)});
+  M.checkChals();M.save();M.rerender();M.updateShell();
+  if(out.finished)return M.finale(out);
+  M.morning(out);
+};
+M.morning=function(out){
+  var S=M.S,c=E.calc(S),st=S.settings;
+  var html='<h2>'+S2('Day '+st.day+' begins','Din '+st.day+' shuru')+'</h2><p class="mut" style="margin-bottom:12px">'+E.dateStr(S,st.day,true)+'</p>'+
+   '<div class="cd blush" style="box-shadow:none;margin-bottom:14px"><div class="row"><span>'+S2('Yesterday','Kal')+'</span><b class="'+(out.under?'ok':'neg')+'">'+(out.nospend?S2('No-spend day 🦆','Zero kharcha 🦆'):out.under?S2('Under allowance ✓','Allowance ke andar ✓'):S2('Over allowance','Allowance cross'))+(out.aura?' · +'+out.aura+' aura':'')+'</b></div>'+
+   '<div class="row"><span>'+S2('Today\'s allowance','Aaj ka allowance')+'</span><b>'+fmt(c.dailyBudget)+'</b></div><div class="row"><span>'+S2('Left of your budget','Budget mein bacha')+'</span><b>'+fmt(c.balance)+'</b></div></div>'+
+   (out.events.length?'<p class="sm mut" style="margin-bottom:6px">'+S2('Posted today','Aaj post hua')+'</p><div class="chips" style="margin-top:0">'+out.events.map(function(x){return '<span class="pill '+(x.t==='in'?'ok':'')+'">'+x.e+' '+esc(x.name)+' '+(x.t==='in'?'+':'−')+fmt(x.amt)+'</span>'}).join('')+'</div>':'');
+  if(out.shock){
+    var sh=out.shock,emg=S.goals.filter(function(g){return g.emergency&&g.saved>=sh.amt&&!g.done})[0];
+    html+='<div class="gcard" style="margin:16px 0 4px;background:var(--blush)"><div class="flex nw"><span style="font-size:38px">'+sh.e+'</span><div><b style="font-size:18px">'+S2('Life happened: ','Life ho gayi: ')+esc(sh.t)+'</b><div class="mut sm">'+esc(sh.d)+'</div></div></div><div class="big" style="font-size:36px;margin:10px 0">'+fmt(sh.amt)+'</div>'+
+     '<div class="flex"><button class="btn" data-act="payshock" data-amt="'+sh.amt+'" data-t="'+esc(sh.t)+'">'+S2('Pay from balance','Balance se de')+'</button>'+(emg?'<button class="btn rose" data-act="payshock" data-amt="'+sh.amt+'" data-t="'+esc(sh.t)+'" data-from="'+emg.id+'">'+S2('Use emergency fund','Emergency fund use kar')+'</button>':'')+'</div>'+
+     (emg?'':'<p class="sm mut" style="margin-top:10px">'+S2('No emergency fund covers this. That is what risk looks like.','Emergency fund se cover nahi hua. Risk aisa hi dikhta hai.')+'</p>')+'</div>';
+    M.modal(html,{sticky:1});return;
+  }
+  html+='<div class="flex" style="margin-top:18px"><button class="btn rose" data-act="mclose">'+S2('Let\'s go','Chalo')+'</button></div>';
+  M.modal(html);
+};
+M.acts.payshock=function(el){
+  var S=M.S,amt=+el.dataset.amt,from=el.dataset.from||null;
+  if(from){var g=S.goals.filter(function(x){return x.id===from})[0];if(g){g.saved-=amt}}
+  M.closeModal();
+  M.logTx({cat:'surprise',note:el.dataset.t,amt:amt,kind:'surprise',from:from});
+  if(from){M.addAura(15,'Emergency fund did its job');M.say(S2('The emergency fund took the hit. Your balance did not.','Emergency fund ne jhela. Balance bach gaya.'),{important:1,icon:'🛟'})}
+};
+M.finale=function(out){
+  var S=M.S,c=E.calc(S),st=S.settings,pass=c.balance>=0;
+  if(pass){M.giveBadge('finish',150);fx.confetti(60)}
+  var html='<h2>'+(pass?S2('You survived the month.','Mahina survive kar liya.'):S2('The month got you this time.','Is baar mahine ne haraya.'))+'</h2><p class="mut" style="margin-bottom:14px">'+S2('30 days. Here is how it went.','30 din. Yeh raha hisaab.')+'</p>'+
+   '<div class="g2" style="gap:12px"><div class="gcard"><div class="kpi"><small>'+S2('Money left','Bacha paisa')+'</small><b class="'+(pass?'ok':'neg')+'">'+fmt(c.balance)+'</b></div></div><div class="gcard"><div class="kpi"><small>'+S2('Financial health','Financial health')+'</small><b>'+c.health.score+'/100</b></div></div><div class="gcard"><div class="kpi"><small>'+S2('Best streak','Best streak')+'</small><b>🔥 '+S.bestStreak+'</b></div></div><div class="gcard"><div class="kpi"><small>'+S2('Saved in goals','Goals mein jama')+'</small><b>'+fmt(S.goals.reduce(function(a,g){return a+g.saved},0))+'</b></div></div></div>'+
+   '<div class="flex" style="margin-top:20px"><button class="btn rose" data-act="newmonth">'+S2('Start next month','Agla mahina shuru')+'</button><button class="btn ghost" data-act="mclose">'+S2('Stay and look around','Yahin ruk')+'</button></div>';
+  M.modal(html,{sticky:0});
+};
+M.acts.newmonth=function(){
+  var S=M.S,c=E.calc(S),left=Math.max(0,Math.round(c.balance/100)*100);
+  M.modal('<h2>'+S2('Start next month','Agla mahina')+'</h2><p class="mut" style="margin-bottom:16px">'+S2('Your goals, subscriptions and bills carry over. Pick your starting budget.','Goals, subscriptions aur bills aage chalte hain. Starting budget chun.')+'</p>'+
+   '<button class="opt" data-act="donewmonth" data-c="0">'+S2('Fresh ₹10,000','Fresh ₹10,000')+'<small>'+S2('A clean slate.','Naya hisaab.')+'</small></button>'+
+   (left>0?'<button class="opt" data-act="donewmonth" data-c="1">'+S2('₹10,000 + '+fmt(left)+' leftover','₹10,000 + '+fmt(left)+' bacha hua')+'<small>'+S2('Reward for surviving.','Survive karne ka inaam.')+'</small></button>':''));
+};
+M.acts.donewmonth=function(el){E.newMonth(M.S,el.dataset.c==='1');M.closeModal();M.save();M.go('/home');M.rerender();M.updateShell();M.toast(S2('Day 1 of a new month. Same girl, better habits.','Naye mahine ka Day 1. Wahi tu, better habits.'),{icon:'🌱'})};
+})();

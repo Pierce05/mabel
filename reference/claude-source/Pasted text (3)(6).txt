@@ -1,0 +1,118 @@
+/* Mabel — static data: categories, presets, badges, challenges, copy, simulation cards */
+(function(){
+var M=window.M,D=M.D={};
+
+D.CATS={
+  food:{n:'Food & chai',e:'🍜',c:'#FFB3A7',disc:1},
+  delivery:{n:'Food delivery',e:'🛵',c:'#F4A6BD',disc:1},
+  transport:{n:'Transport',e:'🚇',c:'#C7C3FF',disc:1},
+  shopping:{n:'Shopping',e:'🛍️',c:'#D7B8C7',disc:1},
+  fun:{n:'Fun & outings',e:'🎬',c:'#FFE56B',disc:1},
+  health:{n:'Health & care',e:'💊',c:'#A7BB9A',disc:1},
+  study:{n:'Study & tools',e:'📚',c:'#9FB4FF',disc:1},
+  other:{n:'Other',e:'✨',c:'#d9d0d2',disc:1},
+  surprise:{n:'Surprise',e:'⚡',c:'#FF8A5B',disc:1},
+  bills:{n:'Bills',e:'🧾',c:'#e3cfa8'},
+  subs:{n:'Subscriptions',e:'📺',c:'#bcd9a8'},
+  goal:{n:'Goals',e:'🎯',c:'#ffd0a8'},
+  income:{n:'Money in',e:'💼',c:'#A7BB9A'}
+};
+D.DISC=Object.keys(D.CATS).filter(function(k){return D.CATS[k].disc});
+D.SPEND_CATS=['food','delivery','transport','shopping','fun','health','study','other'];
+D.QUICK=[['☕','Chai','food',40],['🛵','Zomato','delivery',290],['🚇','Metro','transport',60],['🛍️','Amazon','shopping',799],['🍜','Lunch','food',120],['🎬','Movie','fun',250],['🛺','Auto','transport',80],['🧋','Boba','food',180]];
+D.KW=[[/zomato|swiggy|delivery|pizza|burger|biryani|dominos|kfc|mcd/i,'delivery'],[/chai|coffee|tea|lunch|snack|canteen|grocer|mess|tiffin|maggi/i,'food'],[/metro|uber|ola|auto|bus|petrol|cab|rapido|train/i,'transport'],[/shoe|sneaker|amazon|myntra|flipkart|dress|shirt|jeans|headphone|earbud|gadget|phone|case|bag|watch|hoodie|kurta/i,'shopping'],[/movie|trip|party|concert|game|cafe|outing|club|ticket|bowling/i,'fun'],[/medicine|doctor|gym|pharma|salon|skincare|haircut/i,'health'],[/book|course|udemy|stationery|laptop|print|notes/i,'study']];
+D.guessCat=function(t){for(var i=0;i<D.KW.length;i++)if(D.KW[i][0].test(t||''))return D.KW[i][1];return 'shopping'};
+
+D.OPTS=[['☕ Chai',40,'food'],['🛵 Zomato',290,'delivery'],['👟 Sneakers',1299,'shopping'],['🎧 Headphones',2499,'shopping'],['✈️ Jaipur trip',4500,'fun']];
+
+D.SHOCKS=[
+  {e:'📱',t:'Cracked phone screen',d:'You dropped it. Obviously on concrete.',c:'Phone ki screen toot gayi. Obviously concrete pe.',amt:1800},
+  {e:'🎁',t:"Friend's birthday",d:'You cannot show up empty-handed.',c:'Dost ka birthday. Khaali haath jaana allowed nahi.',amt:700},
+  {e:'🛺',t:'Missed the last bus',d:'The auto guy smelled your panic.',c:'Last bus chhoot gayi. Auto wale ne panic soongh liya.',amt:450},
+  {e:'💊',t:'Doctor visit',d:'Seasonal flu said hi.',c:'Mausam ka bukhaar aa gaya.',amt:900},
+  {e:'🔌',t:'Laptop charger died',d:'At 2%. Of course.',c:'2% pe charger mar gaya. Of course.',amt:1200},
+  {e:'🧾',t:'Late fee',d:'A bill you forgot became a bigger bill.',c:'Bhoola hua bill ab bada bill hai.',amt:350},
+  {e:'🖨️',t:'Project print + lab fee',d:'Submission is tomorrow.',c:'Kal submission hai. Print nikal.',amt:600},
+  {e:'🍕',t:'Surprise team dinner',d:"'Split equally' is a lie.",c:"'Equal split' ek jhooth hai.",amt:550},
+  {e:'🔧',t:'Bike puncture + service',d:'It had been making that noise for weeks.',c:'Hafton se awaaz kar rahi thi.',amt:800},
+  {e:'💍',t:"Cousin's wedding gift",d:'The family WhatsApp group is watching.',c:'Family group dekh raha hai.',amt:1500}
+];
+
+D.TIPS=['Zomato ₹290. Third time this week. Cooking once saves ₹580.','Chai ₹40. Small, and totally affordable.','That wishlist item is 7 days old. Still want it?','Pay yourself first. Move ₹500 to Goals?','Quiet mode is on. Only the important stuff gets through.','Small choices today, a freer tomorrow.','Money loves discipline (and a little softness) ♡','A no-spend day is a love letter to future you.'];
+D.TIPSC=['Bas kar bhai. Cart khaali kar.','I saw that 👀','Sharam nahi aayi? Third Zomato this week.',"Ew brother ew. What's that? ₹799 on Amazon?",'Is Zomato your hobby?','Paisa vasool moment. Keep it going.','Daddy chill: you are under allowance today.',"Mabel: I'm right, you're wrong, shut up. (Put the cart down.)"];
+D.MQ=['make every buck last','money loves discipline','small choices today, a freer tomorrow','earn','save','spend wisely','be proud','repeat','not broke, just in my pre-rich arc'];
+D.MQC=['make every buck last','paisa vasool','money loves discipline','chill maar, budget bana','not broke, just in my pre-rich arc','bas kar bhai, cart khaali kar','scene set hai'];
+D.IMG={daddy:'img/daddy.jpg',warn:'img/warn.jpg',relax:'img/relax.jpg'};
+
+D.SUBS=[['🎵','Spotify',119,14],['📺','Netflix',199,16],['▶️','YouTube Premium',129,5],['📦','Amazon Prime',299,20],['🎬','Hotstar',149,9],['🏋️','Gym',599,21],['☁️','Cloud storage',75,12],['🎮','Game pass',349,25]];
+D.BILLS=[['📱','Phone recharge',299,8],['📶','Wi-Fi share',350,18],['🍱','Tiffin / mess',1200,15],['🚌','Bus pass',400,3],['🏠','Rent share',2500,1],['📚','Course EMI',500,10],['💡','Electricity share',250,20]];
+D.GOALS=[['🛟','Emergency fund',2000,1],['✈️','Weekend trip',5000],['📱','New phone',15000],['💻','Laptop',30000],['🎧','Headphones',2500],['👟','Sneakers',3500],['🎁','Gifts fund',1500],['🐷','Just save',3000]];
+D.AVATARS=['🌸','🦋','🐸','🦭','🐈','🌙','🍓','🧿','🪩','🦄'];
+D.LEVELS=[[0,'NPC','NPC'],[100,'Side character','Side quest'],[300,'Main character','Hero no. 1'],[700,'Pre-rich arc','Seth in the making'],[1500,'Rich era','Ambani mode']];
+D.SQUAD=[['Aanya','💅',1240],['Rohan','🎧',980],['Meher','🌱',860],['Kabir','🛵',410],['Isha','📚',300]];
+
+D.CHALS=[
+  {id:'broke',name:'Broke But Functional',desc:'Survive 30 days on ₹10,000.',tag:'Main track',bg:'#ffd9d2',reward:150,meme:'one mental breakdown later… still functional',rule:'Finish day 30 with a balance above ₹0.'},
+  {id:'nodeliv',name:'No Food Delivery',desc:'Your kitchen misses you.',tag:'14 days',days:14,bg:'#e4ecdc',reward:100,rule:'No spend in Food delivery for 14 days.'},
+  {id:'cash',name:'Cash Only Week',desc:"You'll feel every rupee.",tag:'7 days',days:7,bg:'#e6e4ff',reward:80,rule:'Log every purchase as Cash for 7 days. Pay by UPI or card and it resets.'},
+  {id:'purge',name:'Subscription Purge',desc:'Find the ones you forgot about.',tag:'Anytime',bg:'#f3dfe8',reward:70,rule:'Review every subscription: keep it or cancel it.'},
+  {id:'under7',name:'Seven Under Seven',desc:'Stay under your daily allowance, seven days running.',tag:'7 days',days:7,bg:'#ffe9b8',reward:120,rule:'Close 7 days in a row at or under your allowance.'},
+  {id:'chai',name:'Chai Over Cafe',desc:'The tapri has better vibes anyway.',tag:'10 days',days:10,bg:'#d8ecf5',reward:90,rule:'No single Fun & outings spend above ₹150 for 10 days.'},
+  {id:'nospendw',name:'No-Spend Weekend',desc:'Two zero-spend days in a row.',tag:'2 days',days:2,bg:'#fbd5e3',reward:60,rule:'Close two days in a row with ₹0 spent on wants.'}
+];
+
+/* Unified badge shelf: aesthetic skin (a) and chill skin (h) */
+D.BADGES=[
+  {id:'wait',k:'wait',n:40,d:'Wait a week on a want',a:{e:'🐌',t:'I snailed it.',c:'#FFB3A7'},h:{img:'daddy',t:'Daddy chill',c:'#FFE56B'}},
+  {id:'skip',k:'skip',n:60,d:'Skip a purchase',a:{e:'🦭',t:'Seal of approval',c:'#A7BB9A'},h:{bg:'linear-gradient(135deg,#ffd200,#e0223c)',fg:'#fff',t:'Slay',c:'#ff6b6b'}},
+  {id:'buyl',k:'buyl',n:80,d:'Buy something that barely dents your month',a:{e:'🐠',t:'O-fish-ially affordable',c:'#C7C3FF'},h:{bg:'#4CC38A',fg:'#141414',t:'Paisa vasool',c:'#4CC38A'}},
+  {id:'buym',k:'buym',n:100,d:'Make a big purchase on purpose',a:{e:'🥹',t:'Cried but did it anyway',c:'#F4A6BD'},h:{img:'warn',t:'Last warning, ok',c:'#FF8A5B'}},
+  {id:'buyh',k:'buyh',n:60,d:'Try a purchase that wrecks your month',a:{e:'🦭',t:'Seal of disapproval',c:'#b9b4bb'},h:{bg:'#fff',fg:'#141414',t:'Go buy a brain',c:'#9aa0b0'}},
+  {id:'streak7',d:'Hit a 7-day streak under your allowance',a:{e:'🐸',t:'Un-frog-ettable',c:'#bcd9a8'},h:{bg:'#141414',fg:'#FFC21A',t:'+1000 aura',c:'#FFC21A'}},
+  {id:'nospend',d:'Close a day with zero spend on wants',a:{e:'🦆',t:'Unproducktive',c:'#9fb4d8'},h:{bg:'#fff',fg:'#141414',t:'Zero kharcha',c:'#9fb4d8'}},
+  {id:'sub',d:'Cancel a subscription',a:{e:'🦥',t:"Cancel, don't postpone",c:'#e3cfa8'},h:{bg:'#1e7bff',fg:'#fff',t:'bruh.',c:'#8fc1ff'}},
+  {id:'finish',d:'Finish the 30-day challenge in the green',a:{e:'🐈',t:'Slay, serve, survive',c:'#ffd0a8'},h:{bg:'#FFC21A',fg:'#141414',t:'Scene sorted',c:'#FFC21A'}},
+  {id:'regret',d:'Impulse-buy and instantly regret it',a:{e:'🙃',t:'Oops, bought it',c:'#f7c6d0'},h:{bg:'#fff',fg:'#141414',t:'FAHHH',c:'#ffb3a7'}},
+  {id:'quiet',d:'Keep quiet mode on for 7 days',a:{e:'🧘',t:'Quiet era',c:'#d4e0f7'},h:{img:'relax',t:'Relax shawty',c:'#9FB4FF'}},
+  {id:'goal',d:'Fully fund a goal',a:{e:'🎯',t:'Goal getter',c:'#f5d98b'},h:{bg:'#4CC38A',fg:'#141414',t:'Paisa jama',c:'#4CC38A'}}
+];
+D.badge=function(id){return D.BADGES.filter(function(b){return b.id===id})[0]};
+// scalloped rosette outline used by the badge shape
+D.CP=(function(){var a=[];for(var i=0;i<220;i++){var t=i/220*6.2832,r=46+3.2*Math.cos(22*t);a.push((50+r*Math.cos(t)).toFixed(1)+'% '+(50+r*Math.sin(t)).toFixed(1)+'%')}return 'polygon('+a.join(',')+')'})();
+
+/* ---------- "Play the month" cards: [label, cost (+ spends / − earns), aura, stress, result line] ---------- */
+D.CARDS=[
+  {e:'👟',t:'Flash sale alert',d:'Sneakers 40% off. The timer says 02:59.',k:'temptation',ch:[['Grab them  −₹1,499',1499,-10,-8,'Feet: elite. Wallet: weeping.'],['Add to wishlist',0,15,4,'The timer was lying anyway.']]},
+  {e:'🌙',t:'Midnight craving',d:'Zomato is open and so is your weak side.',c:'Zomato khula hai aur tu kamzor hai.',k:'temptation',ch:[['Order biryani  −₹420',420,-6,-7,'Worth it for about nine minutes.'],['Make Maggi  −₹25',25,10,2,'Chef Mabel approves.']]},
+  {e:'🎧',t:'New drop',d:'Earbuds you "need". Reviews: 4.4 stars.',k:'temptation',ch:[['Buy now  −₹2,299',2299,-12,-9,'Crisp bass. Crispy bank balance.'],['Wait a week',0,18,3,'Funny how the need faded.']]},
+  {e:'🛒',t:'Cart reminder',d:'Amazon: "You left something behind 🥺"',k:'temptation',ch:[['Checkout  −₹799',799,-8,-5,'Delivery in 2 days. Regret in 2 minutes.'],['Clear the cart',0,12,2,'Cart khaali. Mann halka.']]},
+  {e:'🧋',t:'Boba run',d:'Your friend sends a photo of tapioca pearls.',k:'temptation',ch:[['Join them  −₹220',220,-3,-6,'Pearls: chewed. Mood: lifted.'],['Tea at home  −₹10',10,6,1,'Cheaper, strangely satisfying.']]},
+  {e:'🎟️',t:'Concert tickets',d:'Your favourite band. Floor tickets. Today only.',k:'temptation',ch:[['Book 2  −₹3,000',3000,-18,-14,'Core memory, unlocked. Savings, locked out.'],['Watch the live stream',0,20,6,'Free, loud, and no queue.']]},
+  {e:'💄',t:'Haul o\'clock',d:'The skincare sale has a "buy 3 get 1" tag.',k:'temptation',ch:[['Haul it  −₹1,150',1150,-8,-6,'Glowing. Soon broke.'],['Just the one  −₹350',350,8,-1,'Disciplined glow-up.']]},
+  {e:'🎂',t:"Friend's birthday dinner",d:'Group dinner. Someone says "we\'ll split equally".',k:'social',ch:[['Go all in  −₹900',900,-4,-8,'Memories made. Dessert included.'],['Come for cake only  −₹250',250,8,2,'Present for the part that matters.'],['Skip it',0,4,10,'You feel left out. Mildly.']]},
+  {e:'🏝️',t:'Group trip proposal',d:'"Goa, 3 days, ₹4,000 each. Are you in?"',k:'social',ch:[['I am in  −₹4,000',4000,-15,-18,'Sunset + sand. Balance: tragic.'],['Pitch a day trip  −₹600',600,12,-4,'You became the sensible one.'],['Pass',0,6,12,'Stories on Instagram hurt a bit.']]},
+  {e:'🎬',t:'Movie night',d:'Everyone is watching the new release.',k:'social',ch:[['Theatre  −₹450',450,-3,-8,'Popcorn: ₹300. Seat: ₹150.'],['Watch at home',0,10,0,'Cozy, free, and pausable.']]},
+  {e:'🤝',t:'Roommate asks for ₹500',d:'"Will return on Monday." It is a Friday.',k:'social',ch:[['Lend it  −₹500',500,0,-2,'Kindness has a price. You hope they remember.'],['Lend ₹200  −₹200',200,5,0,'Calibrated generosity.'],['Not this time',0,2,8,'Awkward, but necessary.']]},
+  {e:'🎉',t:'College fest entry',d:'The pass includes one free drink (allegedly).',k:'social',ch:[['Go  −₹600',600,-4,-9,'Good lights, bad food stalls.'],['Stay in',0,6,6,'Peace. Also, rice.']]},
+  {e:'📱',t:'Cracked screen',d:'Dropped it. Obviously on concrete.',c:'Phone gira. Concrete pe. Obviously.',k:'surprise',ch:[['Fix it  −₹1,800',1800,0,-6,'Shiny again. Account: not.'],['Tempered glass patch  −₹200',200,6,6,'Cracks, but functional. Very on-theme.']]},
+  {e:'🔧',t:'Bike puncture',d:'It had been making that noise for weeks.',k:'surprise',ch:[['Full service  −₹800',800,0,-3,'Smooth ride, thin wallet.'],['Just the puncture  −₹120',120,5,3,'Short-term fix. Fingers crossed.']]},
+  {e:'💊',t:'Seasonal flu',d:'Your body filed a complaint.',k:'surprise',ch:[['Doctor + meds  −₹900',900,0,-6,'Back on your feet by Thursday.'],['Home remedies  −₹150',150,5,6,'Kadha. Lots of kadha.']]},
+  {e:'🧾',t:'Late fee',d:'A bill you forgot became a bigger bill.',k:'surprise',ch:[['Pay it  −₹350',350,0,2,'Lesson learned (again).']]},
+  {e:'🖨️',t:'Submission tomorrow',d:'Print, bind, pray.',k:'surprise',ch:[['Print shop  −₹600',600,0,0,'Spiral-bound and stressed.'],['Print only  −₹150',150,5,3,'No binding. Staples are free.']]},
+  {e:'🔌',t:'Charger gave up',d:'At 2%. Of course.',k:'surprise',ch:[['New original  −₹1,200',1200,0,-2,'Good for another two years.'],['Local one  −₹350',350,4,3,'It works. Mostly.']]},
+  {e:'🛺',t:'Auto surge',d:'Rain started. Prices followed.',k:'surprise',ch:[['Take the auto  −₹300',300,-2,-3,'Dry and dented.'],['Wait it out',0,5,5,'Chai tapri bonding hour.']]},
+  {e:'💼',t:'Freelance gig!',d:'A friend needs a poster designed by tonight.',k:'chance',ch:[['Do it  +₹1,500',-1500,10,8,'Late night. Cash in. Eyes: red.'],['Decline',0,0,-3,'Sleep wins today.']]},
+  {e:'💸',t:'Cashback landed',d:'A UPI reward you forgot about.',k:'chance',ch:[['Claim  +₹120',-120,4,-2,'Free money, the best kind.']]},
+  {e:'👖',t:'Found ₹200 in jeans',d:'Past-you was thoughtful.',k:'chance',ch:[['Keep it  +₹200',-200,3,-3,'Thanks, past-me.']]},
+  {e:'👩',t:'Mom UPI-d ₹500',d:'Caption: "for food, please eat properly".',k:'chance',ch:[['Accept  +₹500',-500,3,-5,'Love in the form of ₹500.']]},
+  {e:'📚',t:'Sell old books',d:'Juniors are looking for exactly your set.',k:'chance',ch:[['Sell  +₹400',-400,6,3,'Bookshelf lighter, wallet lighter-less.']]},
+  {e:'🏆',t:'Mini scholarship',d:'The email said "congratulations".',k:'chance',ch:[['Accept  +₹800',-800,8,-8,'You framed the email in your mind.']]},
+  {e:'🍳',t:'Cook or order?',d:'It is 8 pm. The fridge: sad. The app: tempting.',k:'habit',ch:[['Order  −₹320',320,-5,-4,'Warm, quick, a bit pricey.'],['Cook  −₹60',60,10,1,'Dal chawal and self-respect.']]},
+  {e:'🏋️',t:'Gym or sofa?',d:'The membership is paid. Your motivation: pending.',k:'habit',ch:[['Go to the gym',0,10,-3,'Worth the subscription. Finally.'],['Sofa',0,-4,4,'The subscription cries.']]},
+  {e:'🚶',t:'Walk or auto?',d:'It is 1.5 km. Your shoes are fine.',k:'habit',ch:[['Auto  −₹80',80,-2,-1,'Quick, lazy, fine.'],['Walk',0,6,0,'Steps +4,000. Playlist +1.']]},
+  {e:'☕',t:'Tapri or cafe?',d:'You need caffeine and a place to sit.',k:'habit',ch:[['Cafe  −₹260',260,-3,-4,'Wi-Fi, vibes, and a laminated menu.'],['Chai tapri  −₹30',30,8,0,'Best chai in town. Fact.']]},
+  {e:'📺',t:'Subscription renews',d:'A streaming plan you used twice is due today.',k:'habit',ch:[['Let it renew  −₹199',199,-6,0,'It is not you, it is auto-pay.'],['Cancel it',0,12,2,'Free at last.']]},
+  {e:'🎮',t:'Game sale',d:'The one you wishlisted is 70% off.',k:'temptation',ch:[['Buy  −₹549',549,-4,-5,'Backlog: +1. Joy: briefly.'],['Keep wishlisting',0,8,2,'Backlog is already 14 games long.']]},
+  {e:'🧺',t:'Laundry day',d:'The laundromat charges per kg. Your hands are free.',k:'habit',ch:[['Send it  −₹150',150,-1,-2,'Folded, fragrant.'],['Wash yourself',0,5,3,'Biceps +1.']]}
+];
+})();

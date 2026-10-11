@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-mode="aesthetic">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f4ed"><title>Mabel — Make Every Buck Last</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Permanent+Marker&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="auth" class="auth-wrap">
+  <div class="auth-art"><div class="brand"><span class="brand-mark">m.</span> mabel<span class="star">✳</span></div><div class="art-copy"><span class="eyebrow">YOUR MONEY ERA STARTS HERE</span><h1>Not broke.<br>Just in your<br><em>pre-rich arc.</em></h1><p>Build better money habits without making budgeting your whole personality.</p><div class="sticker s1">main character<br>energy ✦</div><div class="sticker s2">₹10k<br>30 days</div><div class="orb"></div></div><div class="auth-foot">LESS PANIC. MORE PLAN.™</div></div>
+  <div class="auth-panel"><div class="mobile-brand brand"><span class="brand-mark">m.</span> mabel<span class="star">✳</span></div><div class="auth-box"><div class="eyebrow">THE MONEY APP FOR REAL LIFE</div><h2 id="auth-title">Welcome back.</h2><p class="muted" id="auth-sub">Your future self saved you a seat.</p>
+  <div class="auth-vibe"><span class="eyebrow">PICK YOUR MABEL VIBE</span><div class="vibe-options"><button type="button" class="vibe-option selected" data-act="choose-vibe" data-mode="aesthetic">✿ Aesthetic <small>soft reset</small></button><button type="button" class="vibe-option" data-act="choose-vibe" data-mode="chill">😎 Chill <small>no-filter mode</small></button></div></div>
+  <form id="auth-form"><div id="name-field" class="field hidden"><label for="auth-name">What should we call you?</label><input id="auth-name" autocomplete="name" placeholder="Your name"></div><div class="field"><label for="auth-email">Email address</label><input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" required></div><div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters" required></div><p id="auth-error" class="error" aria-live="polite"></p><button class="btn primary full" type="submit" id="auth-submit">Log in <span>↗</span></button></form>
+  <button id="demo-login" class="btn outline full">Explore the demo instead ↗</button><p class="auth-switch"><span id="switch-copy">New around here?</span> <button id="auth-switch" class="text-button">Create an account</button></p><p class="tiny muted">Prototype note: accounts and data are stored locally in this browser. Don't use a real password.</p></div></div>
+</div>
+<div id="app" class="app hidden">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand brand-link" href="#home"><span class="brand-mark">m.</span> mabel<span class="star">✳</span></a>
+    <div class="side-label">YOUR MONEY UNIVERSE</div>
+    <nav class="nav-list" id="nav-list">
+      <button class="nav-item active" data-page="home"><span>▦</span> Overview <kbd>01</kbd></button>
+      <button class="nav-item" data-page="tracker"><span>↗</span> Track money <kbd>02</kbd></button>
+      <button class="nav-item" data-page="simulate"><span>⌁</span> What-if lab <kbd>03</kbd></button>
+      <button class="nav-item" data-page="plan"><span>▤</span> Month plan <kbd>04</kbd></button>
+      <button class="nav-item" data-page="goals"><span>◎</span> Goals <kbd>05</kbd></button>
+      <button class="nav-item" data-page="commitments"><span>⟳</span> Bills & subs <kbd>06</kbd></button>
+      <button class="nav-item" data-page="challenges"><span>✳</span> Challenges <kbd>07</kbd></button>
+      <button class="nav-item" data-page="decide"><span>♡</span> Should I buy this? <kbd>08</kbd></button>
+      <button class="nav-item" data-page="tea"><span>☕</span> Chai pe charcha <kbd>09</kbd></button>
+      <button class="nav-item" data-page="health"><span>✿</span> Financial health <kbd>10</kbd></button>
+      <button class="nav-item" data-page="rewards"><span>✦</span> Badges & aura <kbd>11</kbd></button>
+      <button class="nav-item" data-page="board"><span>▧</span> Vision board <kbd>12</kbd></button>
+      <button class="nav-item" data-page="insights"><span>⌗</span> Money lore <kbd>13</kbd></button>
+    </nav>
+    <div class="sidebar-bottom"><div class="squad-card"><div class="squad-icon">✦</div><div><b>Small wins count.</b><p>Every rupee has a plot.</p></div></div><button class="nav-item" data-page="settings"><span>⚙</span> Settings</button><button class="nav-item" id="logout"><span>↪</span> Log out</button><div class="user-mini"><div class="avatar" id="side-avatar">P</div><div class="user-text"><b id="side-name">You</b><small>Chief money officer</small></div><span class="online-dot"></span></div></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><button id="menu-toggle" class="icon-btn mobile-only" aria-label="Open navigation">☰</button><div class="crumb"><span class="live-dot"></span> YOUR MONEY ERA <span class="slash">/</span> <b id="page-crumb">OVERVIEW</b></div><div class="top-actions"><button class="mode-toggle" id="vibe-toggle">◉ <span>Vibe: Unhinged</span></button><button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">◐</button><button class="avatar top-avatar" id="profile-btn" aria-label="Open settings">P</button></div></header>
+    <div class="page-wrap" id="page-content"></div>
+    <footer class="footer"><span>MABEL © 2026</span><span>Built for the plot, powered by maths.</span><span>₹ > regret</span></footer>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="modal-root"></div>
+<script src="app.js"></script>
+</body></html>
