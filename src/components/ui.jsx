@@ -1,0 +1,19 @@
+import {Fragment,useEffect} from 'react';
+import {useApp,LBL} from '../store.jsx';
+import {rose,spark} from '../lib/badges.js';
+import {fmt,EMO} from '../lib/util.js';
+export const Rosette=({b,s=1})=><div style={{width:130*s,height:172*s}}><div style={{transform:`scale(${s})`,transformOrigin:'top left',width:130}} dangerouslySetInnerHTML={{__html:rose(b)}}/></div>;
+export const Head=({k,t,s,a})=><div className="ap-head"><div><div className="mono">{k}</div><h1>{t}</h1><p className="mut">{s}</p></div>{a}</div>;
+export const Bar=({p,c})=><div className="bar"><i style={{width:`${Math.min(100,Math.max(0,p))}%`,...(c?{background:c}:{})}}/></div>;
+export const Stat=({k,v,s,c})=><div className={'bc'+(c?' stc':'')} style={c?{background:c}:null}><div className="mono" style={c?{color:'#333'}:null}>{k}</div><b className="big2">{v}</b><small className={c?'':'mut'} style={c?{color:'#3a3033'}:null}>{s}</small></div>;
+export function Marquee(){const {L}=useApp();const ph=L(['make every buck last','money loves discipline','small choices today, a freer tomorrow','earn','save','spend wisely','be proud','repeat','not broke, just in my pre-rich arc'],['make every buck last','paisa vasool','money loves discipline','chill maar, budget bana','not broke, just in my pre-rich arc','bas kar bhai, cart khaali kar','scene set hai']);return <div className="marq" aria-hidden="true"><div>{[...ph,...ph].map((p,i)=><Fragment key={i}><span>{p}</span><b>✦</b></Fragment>)}</div></div>}
+export const TxRow=({t,children})=><div className="row" style={{alignItems:'center'}}><span className="rowf0"><span className="tile">{EMO[t.c]||'💸'}</span><span><b>{t.n}</b><br/><small className="mut">Day {t.d} · {t.c}</small></span></span><span style={{textAlign:'right'}}><b style={{color:`var(--${t.a<0?'neg':'ok'})`}}>{t.a<0?'−':'+'}{fmt(Math.abs(t.a))}</b>{children}</span></div>;
+export function Cats(){const {d}=useApp(),m=d.cats[0]?d.cats[0][1]:1,cs=['var(--rose)','var(--peach)','var(--sage)','var(--lilac)','var(--mauve)'];return d.cats.map(([n,v],i)=><div className="row" style={{alignItems:'center'}} key={n}><span>{EMO[n]} {n}</span><span style={{flex:1,margin:'0 14px'}}><Bar p={v/m*100} c={cs[i%5]}/></span><b>{fmt(v)}</b></div>)}
+export function AuraBox(){const {S,set}=useApp();const pend=set.filter(x=>x.k&&!x.on).sort((a,b)=>a.n-b.n);let h='All decision badges earned',p=100;if(pend.length){const r=pend.find(x=>x.n<=S.aura);if(r)h=`Ready: ${LBL[r.k]} to unlock "${r.t}"`;else{h=`${pend[0].n-S.aura} more aura for the next badge`;p=S.aura/pend[0].n*100}}return <div className="aura"><div className="rowf"><span><b className="big2" style={{fontSize:24}}>{S.aura}</b> aura</span><span className="mut">{h}</span></div><div className="bar" style={{height:10,marginTop:6}}><i style={{width:p+'%'}}/></div></div>}
+export function Fx(){const {fx,setFx}=useApp();
+useEffect(()=>{if(!fx.nudge)return;const t=setTimeout(()=>setFx(f=>({...f,nudge:null})),3700);return()=>clearTimeout(t)},[fx.nudge]);
+useEffect(()=>{if(!fx.award)return;for(let i=0;i<14;i++)setTimeout(()=>spark(innerWidth/2+(Math.random()-.5)*260,innerHeight/2+(Math.random()-.5)*200),i*60);const t=setTimeout(()=>setFx(f=>({...f,award:null})),2900);return()=>clearTimeout(t)},[fx.award]);
+useEffect(()=>{if(!fx.gain)return;const t=setTimeout(()=>setFx(f=>({...f,gain:null})),1500);return()=>clearTimeout(t)},[fx.gain]);
+return <>{fx.nudge&&<div className="nudge" key={fx.nudge.k} role="status"><div className="ni">M</div><div><b>Mabel</b><br/>{fx.nudge.text}</div></div>}
+{fx.award&&<div className="award" key={fx.award.k} role="status"><Rosette b={{...fx.award,on:1}}/><b>Badge unlocked</b><span>{fx.award.d}</span></div>}
+{fx.gain&&<div className="gain" key={fx.gain.k} aria-live="polite" style={{color:`var(--${fx.gain.v>0?'ok':'neg'})`,right:120,top:76}}>{fx.gain.v>0?'+':'−'}{Math.abs(fx.gain.v)} aura</div>}</>}
